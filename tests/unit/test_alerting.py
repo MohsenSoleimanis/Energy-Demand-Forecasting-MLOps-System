@@ -1,9 +1,8 @@
 """Unit tests for alerting module (MON-004)."""
 
 import logging
-import pytest
 
-from src.ml.monitoring.alerting import AlertLevel, classify_alert, Alert, send_alert
+from src.ml.monitoring.alerting import Alert, AlertLevel, classify_alert, send_alert
 
 
 class TestClassifyAlert:

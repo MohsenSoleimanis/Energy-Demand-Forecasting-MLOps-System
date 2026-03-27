@@ -10,7 +10,6 @@ production model baseline and generates a regression performance report.
 import logging
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -67,7 +66,7 @@ def generate_performance_report(
     target_col: str = "total_load_actual_mw",
     prediction_col: str = "predicted_load_mw",
     output_path: str = "reports/performance_report.html",
-    registered_mape: Optional[float] = None,
+    registered_mape: float | None = None,
     mape_warning: float = DEFAULT_MAPE_WARNING,
     mape_critical: float = DEFAULT_MAPE_CRITICAL,
 ) -> dict:
@@ -136,10 +135,10 @@ def run_performance_check(
     target_col: str = "total_load_actual_mw",
     prediction_col: str = "predicted_load_mw",
     output_path: str = "reports/performance_report.html",
-    registered_mape: Optional[float] = None,
+    registered_mape: float | None = None,
     mape_warning: float = DEFAULT_MAPE_WARNING,
     mape_critical: float = DEFAULT_MAPE_CRITICAL,
-    alert_callback: Optional[callable] = None,
+    alert_callback: callable | None = None,
 ) -> dict:
     """
     End-to-end performance check: load data, compute metrics, alert.

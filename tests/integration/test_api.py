@@ -1,8 +1,9 @@
 """Integration tests for FastAPI serving endpoints (SERVE-006)."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pytest
 
 
 @pytest.fixture

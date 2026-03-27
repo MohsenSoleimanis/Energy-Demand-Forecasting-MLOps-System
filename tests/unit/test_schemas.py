@@ -1,13 +1,14 @@
 """Unit tests for Pydantic schemas (SERVE-005)."""
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from src.ml.serving.schemas import (
-    PredictionRequest,
-    PredictionResponse,
     BatchPredictionRequest,
     HealthResponse,
+    PredictionRequest,
+    PredictionResponse,
 )
 
 

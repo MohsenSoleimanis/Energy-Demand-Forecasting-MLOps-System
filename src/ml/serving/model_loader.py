@@ -4,8 +4,9 @@ Model loader for production models from MLflow registry.
 SERVE-003
 """
 
-import mlflow
 import logging
+
+import mlflow
 
 logger = logging.getLogger(__name__)
 

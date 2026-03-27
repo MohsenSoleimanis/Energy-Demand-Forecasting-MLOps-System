@@ -82,7 +82,7 @@ def _call_with_retry(func, *args, **kwargs):
 def _get_client() -> EntsoePandasClient:
     api_key = os.environ.get("ENTSOE_API_KEY")
     if not api_key:
-        raise EnvironmentError("ENTSOE_API_KEY environment variable is not set")
+        raise OSError("ENTSOE_API_KEY environment variable is not set")
     return EntsoePandasClient(api_key=api_key)
 
 

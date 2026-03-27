@@ -8,9 +8,8 @@ Compares a reference dataset (training period) against a current window
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 from evidently import ColumnMapping
@@ -155,7 +154,7 @@ def run_drift_check(
     current_days: int = 7,
     output_path: str = "reports/drift_report.html",
     psi_threshold: float = DEFAULT_PSI_THRESHOLD,
-    alert_callback: Optional[callable] = None,
+    alert_callback: callable | None = None,
 ) -> dict:
     """
     End-to-end drift check: load data, generate report, optionally alert.

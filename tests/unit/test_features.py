@@ -2,15 +2,14 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.ml.features.feature_engineering import (
-    compute_lag_features,
-    compute_rolling_features,
     compute_cyclical_features,
     compute_interaction_features,
-    prepare_features,
+    compute_lag_features,
+    compute_rolling_features,
     get_feature_columns,
+    prepare_features,
 )
 
 

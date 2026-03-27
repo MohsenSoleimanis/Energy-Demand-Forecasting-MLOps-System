@@ -4,10 +4,10 @@ Pydantic v2 request/response schemas for the Energy Demand Forecasting API.
 SERVE-002
 """
 
-from pydantic import BaseModel, Field
-from datetime import datetime
-from typing import Optional
 import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class PredictionRequest(BaseModel):
@@ -22,10 +22,10 @@ class PredictionRequest(BaseModel):
     precipitation: float = Field(ge=0)
     cloud_cover: float = Field(ge=0, le=100)
     pressure_msl: float = Field(ge=900, le=1100)
-    price_eur_mwh: Optional[float] = None
-    load_lag_1h: Optional[float] = None
-    load_lag_24h: Optional[float] = None
-    load_lag_168h: Optional[float] = None
+    price_eur_mwh: float | None = None
+    load_lag_1h: float | None = None
+    load_lag_24h: float | None = None
+    load_lag_168h: float | None = None
 
 
 class PredictionResponse(BaseModel):
@@ -42,8 +42,8 @@ class HealthResponse(BaseModel):
     """Schema for the health check endpoint response."""
 
     status: str
-    model_version: Optional[str] = None
-    model_alias: Optional[str] = None
+    model_version: str | None = None
+    model_alias: str | None = None
 
 
 class ModelInfoResponse(BaseModel):

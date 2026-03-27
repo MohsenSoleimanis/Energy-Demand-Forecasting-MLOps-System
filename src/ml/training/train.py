@@ -13,11 +13,11 @@ import logging
 import os
 import platform
 import subprocess
-import sys
 from pathlib import Path
 
 import lightgbm as lgb
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mlflow

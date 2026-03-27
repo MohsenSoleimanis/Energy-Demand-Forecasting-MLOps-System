@@ -16,14 +16,21 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from src.ml.features.feature_engineering import prepare_features
+from src.ml.serving.metrics import (
+    MODEL_VERSION_GAUGE,
+    PREDICTION_COUNT,
+    PREDICTION_LATENCY,
+    PREDICTION_VALUE,
+)
+from src.ml.serving.model_loader import load_production_model
 from src.ml.serving.schemas import (
     BatchPredictionRequest,
     HealthResponse,
@@ -31,14 +38,6 @@ from src.ml.serving.schemas import (
     PredictionRequest,
     PredictionResponse,
 )
-from src.ml.serving.model_loader import load_production_model
-from src.ml.serving.metrics import (
-    MODEL_VERSION_GAUGE,
-    PREDICTION_COUNT,
-    PREDICTION_LATENCY,
-    PREDICTION_VALUE,
-)
-from src.ml.features.feature_engineering import prepare_features
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +152,7 @@ async def predict(request: PredictionRequest):
     except Exception as e:
         PREDICTION_COUNT.labels(endpoint="/predict", status="error").inc()
         logger.exception("Prediction failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         PREDICTION_LATENCY.labels(endpoint="/predict").observe(time.time() - start)
 
@@ -172,7 +171,7 @@ async def predict_batch(request: BatchPredictionRequest):
     except Exception as e:
         PREDICTION_COUNT.labels(endpoint="/predict/batch", status="error").inc()
         logger.exception("Batch prediction failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         PREDICTION_LATENCY.labels(endpoint="/predict/batch").observe(
             time.time() - start

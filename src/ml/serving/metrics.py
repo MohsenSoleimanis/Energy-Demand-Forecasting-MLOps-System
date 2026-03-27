@@ -4,7 +4,7 @@ Prometheus metrics for the Energy Demand Forecasting API.
 SERVE-004
 """
 
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 
 # Total prediction requests, labeled by endpoint and status
 PREDICTION_COUNT = Counter(

@@ -1,11 +1,12 @@
 """Integration test for ML pipeline with synthetic data (ML-008)."""
 
+from datetime import datetime, timedelta
+
 import numpy as np
 import pandas as pd
 import pytest
-from datetime import datetime, timedelta
 
-from src.ml.features.feature_engineering import prepare_features, get_feature_columns
+from src.ml.features.feature_engineering import get_feature_columns, prepare_features
 
 
 @pytest.fixture
@@ -16,7 +17,6 @@ def synthetic_training_data(tmp_path):
     timestamps = [base_time + timedelta(hours=i) for i in range(n_hours)]
 
     np.random.seed(42)
-    hours = np.array([t.hour for t in timestamps])
     load = 8000 + 2000 * np.sin(np.arange(n_hours) * 2 * np.pi / 24) + np.random.normal(0, 200, n_hours)
 
     df = pd.DataFrame({

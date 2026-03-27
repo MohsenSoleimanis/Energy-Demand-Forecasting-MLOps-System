@@ -16,7 +16,6 @@ import os
 from pathlib import Path
 
 import duckdb
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 

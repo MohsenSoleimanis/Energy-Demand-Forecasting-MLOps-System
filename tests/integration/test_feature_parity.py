@@ -1,7 +1,6 @@
 """Test that training and serving feature pipelines produce identical outputs (ML-009)."""
 
 import pandas as pd
-import pytest
 
 from src.ml.features.feature_engineering import prepare_features
 

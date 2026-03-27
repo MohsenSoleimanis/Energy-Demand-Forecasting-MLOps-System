@@ -110,10 +110,7 @@ def _compute_easter(year: int) -> date:
 
 def _is_school_vacation(d: date, ranges: list[tuple[date, date]]) -> bool:
     """Check if a date falls within any school vacation range."""
-    for start, end in ranges:
-        if start <= d <= end:
-            return True
-    return False
+    return any(start <= d <= end for start, end in ranges)
 
 
 # ---------------------------------------------------------------------------

@@ -94,7 +94,13 @@ select = [
     "SIM",  # flake8-simplify
     "TCH",  # flake8-type-checking
 ]
-ignore = ["E501"]
+ignore = [
+    "E501",   # line too long
+    "N803",   # argument name should be lowercase (ML convention: X for feature matrix)
+    "N806",   # variable name should be lowercase (ML convention: X_train, X_test)
+    "B017",   # pytest.raises(Exception) is acceptable in schema validation tests
+    "UP042",  # StrEnum - we use plain Enum for broader compatibility
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]

@@ -15,9 +15,8 @@ import json
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from urllib.request import Request, urlopen
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ MAPE_CRITICAL_THRESHOLD = 0.10  # 10%
 PSI_WARNING_THRESHOLD = 0.2
 
 
-class AlertLevel(str, Enum):
+class AlertLevel(Enum):
     """Severity levels for monitoring alerts."""
 
     INFO = "INFO"
@@ -46,9 +45,9 @@ class Alert:
         level: AlertLevel,
         source: str,
         message: str,
-        details: Optional[dict] = None,
+        details: dict | None = None,
         title: str = "",
-        timestamp: Optional[datetime] = None,
+        timestamp: datetime | None = None,
     ):
         self.level = level
         self.source = source
@@ -69,8 +68,8 @@ class Alert:
 
 
 def classify_alert(
-    mape: Optional[float] = None,
-    max_psi: Optional[float] = None,
+    mape: float | None = None,
+    max_psi: float | None = None,
     pipeline_failure: bool = False,
     mape_warning_threshold: float = MAPE_WARNING_THRESHOLD,
     mape_critical_threshold: float = MAPE_CRITICAL_THRESHOLD,
@@ -143,7 +142,7 @@ def _send_webhook(alert: Alert, webhook_url: str) -> bool:
 
 def send_alert(
     alert: Alert,
-    webhook_url: Optional[str] = None,
+    webhook_url: str | None = None,
 ) -> None:
     """
     Send/dispatch an alert: always log, optionally send webhook.
@@ -181,10 +180,10 @@ dispatch_alert = send_alert
 # Convenience: combined check-and-alert
 # ---------------------------------------------------------------------------
 def check_and_alert(
-    mape: Optional[float] = None,
-    max_psi: Optional[float] = None,
+    mape: float | None = None,
+    max_psi: float | None = None,
     pipeline_failure: bool = False,
-    webhook_url: Optional[str] = None,
+    webhook_url: str | None = None,
 ) -> Alert:
     """
     Classify metrics, build an alert, and dispatch it.
