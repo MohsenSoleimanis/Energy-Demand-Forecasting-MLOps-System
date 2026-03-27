@@ -1,0 +1,50 @@
+stages:
+  pull_gold:
+    cmd: python -m src.ml.training.pull_gold
+    deps:
+      - src/ml/training/pull_gold.py
+    outs:
+      - data/gold/training_set.parquet
+
+  validate_training_data:
+    cmd: python -c "import pandas as pd; df=pd.read_parquet('data/gold/training_set.parquet'); assert len(df)>=20000, f'Only {len(df)} rows'; assert 'target_load_24h' in df.columns; print(f'Validated {len(df)} rows')"
+    deps:
+      - data/gold/training_set.parquet
+
+  train:
+    cmd: python -m src.ml.training.train
+    deps:
+      - data/gold/training_set.parquet
+      - src/ml/training/train.py
+      - src/ml/features/feature_engineering.py
+      - configs/training/lightgbm.yaml
+    plots:
+      - plots/feature_importance.png:
+          cache: false
+      - plots/shap_summary.png:
+          cache: false
+
+  evaluate:
+    cmd: python -m src.ml.training.evaluate --run-id $(cat metrics/run_id.txt)
+    deps:
+      - src/ml/training/evaluate.py
+      - src/ml/features/feature_engineering.py
+      - data/gold/training_set.parquet
+    metrics:
+      - metrics/eval_metrics.json:
+          cache: false
+    plots:
+      - plots/actual_vs_predicted.png:
+          cache: false
+      - plots/error_by_hour.png:
+          cache: false
+      - plots/error_by_month.png:
+          cache: false
+      - plots/residuals_over_time.png:
+          cache: false
+
+  register:
+    cmd: python -m src.ml.training.register --run-id $(cat metrics/run_id.txt)
+    deps:
+      - metrics/eval_metrics.json
+      - src/ml/training/register.py

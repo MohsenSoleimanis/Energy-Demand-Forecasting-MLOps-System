@@ -1,0 +1,38 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+
+# Data
+data/
+*.duckdb
+*.duckdb.wal
+data/**/*.parquet
+
+# DVC
+dvc.lock
+
+# MLflow
+mlruns/
+
+# Great Expectations
+.great_expectations/uncommitted/
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store

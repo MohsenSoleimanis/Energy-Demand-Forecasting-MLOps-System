@@ -1,0 +1,6 @@
+model_name: "energy-demand-forecast"
+model_alias: "production"
+mlflow_tracking_uri: ${oc.env:MLFLOW_TRACKING_URI,http://localhost:5000}
+batch_size_limit: 1000
+host: "0.0.0.0"
+port: 8000

@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: feature_base
+    description: >
+      Base feature table joining all silver-layer staging models into a single
+      wide table for downstream feature engineering and model training.
+    columns:
+      - name: timestamp_brussels
+        description: Hourly timestamp in Europe/Brussels timezone
+        tests:
+          - unique
+          - not_null
+      - name: load_mw
+        description: Electricity load in megawatts
+        tests:
+          - not_null
+      - name: temperature_2m
+        description: Temperature at 2m above ground in Celsius
+        tests:
+          - not_null
+
+  - name: training_set
+    description: >
+      Feature-engineered training dataset with lag features, rolling statistics,
+      cyclical encodings, interaction features, and a 24-hour-ahead target.
+
+  - name: monitoring_set
+    description: >
+      Recent feature data (last 30 days) prepared for model monitoring.
+      Includes placeholder columns for prediction outputs.
