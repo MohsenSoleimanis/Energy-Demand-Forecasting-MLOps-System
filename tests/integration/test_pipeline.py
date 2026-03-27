@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pyarrow = pytest.importorskip("pyarrow", reason="pyarrow required for parquet tests")
+
 from src.ml.features.feature_engineering import get_feature_columns, prepare_features
 
 
@@ -17,7 +19,11 @@ def synthetic_training_data(tmp_path):
     timestamps = [base_time + timedelta(hours=i) for i in range(n_hours)]
 
     np.random.seed(42)
-    load = 8000 + 2000 * np.sin(np.arange(n_hours) * 2 * np.pi / 24) + np.random.normal(0, 200, n_hours)
+    load = (
+        8000
+        + 2000 * np.sin(np.arange(n_hours) * 2 * np.pi / 24)
+        + np.random.normal(0, 200, n_hours)
+    )
 
     df = pd.DataFrame({
         "timestamp_brussels": timestamps,
@@ -27,7 +33,9 @@ def synthetic_training_data(tmp_path):
         "feels_like_temp": 14 + 10 * np.sin(np.arange(n_hours) * 2 * np.pi / 24),
         "wind_speed_10m": np.random.uniform(0, 30, n_hours),
         "wind_direction_10m": np.random.uniform(0, 360, n_hours),
-        "shortwave_radiation": np.maximum(0, 400 * np.sin(np.arange(n_hours) * 2 * np.pi / 24)),
+        "shortwave_radiation": np.maximum(
+            0, 400 * np.sin(np.arange(n_hours) * 2 * np.pi / 24)
+        ),
         "precipitation": np.random.exponential(1, n_hours),
         "cloud_cover": np.random.uniform(0, 100, n_hours),
         "pressure_msl": np.random.uniform(1000, 1025, n_hours),

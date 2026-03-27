@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+mlflow = pytest.importorskip("mlflow", reason="mlflow required for API integration tests")
+
 
 @pytest.fixture
 def mock_model():
@@ -27,17 +29,17 @@ def test_client(mock_model, mock_model_version):
     with patch("src.ml.serving.app.load_production_model") as mock_load:
         mock_load.return_value = (mock_model, mock_model_version)
 
-        # Patch module-level model state
         import src.ml.serving.app as app_module
+
         app_module._model = mock_model
         app_module._model_version = mock_model_version
         app_module._model_name = "energy-demand-forecast"
 
         from fastapi.testclient import TestClient
+
         client = TestClient(app_module.app)
         yield client
 
-        # Clean up
         app_module._model = None
         app_module._model_version = None
 
