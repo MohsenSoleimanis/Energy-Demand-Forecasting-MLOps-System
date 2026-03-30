@@ -217,19 +217,35 @@ def train() -> str:
             verbose=-1,
         )
 
+        # Custom callback to log per-iteration metrics to MLflow
+        class MlflowLogCallback:
+            """Log validation loss at each boosting round to MLflow."""
+            def __init__(self):
+                self.order = 25  # Run after other callbacks
+
+            def __call__(self, env):
+                for data_name, eval_name, result, _ in env.evaluation_result_list:
+                    mlflow.log_metric(
+                        f"{data_name}_{eval_name}",
+                        result,
+                        step=env.iteration,
+                    )
+
         callbacks = [
             lgb.early_stopping(stopping_rounds=early_stopping),
-            lgb.log_evaluation(period=100),
+            lgb.log_evaluation(period=50),
+            MlflowLogCallback(),
         ]
 
         model.fit(
             X_train,
             y_train,
             eval_set=[(X_val, y_val)],
+            eval_names=["val"],
             callbacks=callbacks,
         )
 
-        # --- Metrics ---
+        # --- Final Metrics ---
         val_preds = model.predict(X_val)
         test_preds = model.predict(X_test)
 

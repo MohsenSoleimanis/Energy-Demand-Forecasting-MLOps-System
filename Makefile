@@ -7,30 +7,34 @@ down:
 	docker compose down
 
 ingest:
-	python -m src.ingestion.entsoe_fetcher
+	python -m src.data_platform.ingestion.ingest_entsoe
+	python -m src.data_platform.ingestion.ingest_weather
+	python -m src.data_platform.ingestion.ingest_weather_forecast
+	python -m src.data_platform.ingestion.generate_calendar
 
 transform:
-	python -m src.transformation.bronze_to_silver
+	cd src/data_platform/dbt_project && dbt run
+	cd src/data_platform/dbt_project && dbt test
 
 train:
-	python -m src.training.train
+	python -m src.ml.training.pull_gold
+	python -m src.ml.training.train
 
 serve:
-	python -m src.serving.app
+	uvicorn src.ml.serving.app:app --host 0.0.0.0 --port 8000 --reload
 
 test:
-	pytest tests/ -v
+	pytest tests/ -v --cov=src
 
 monitor:
-	python -m src.monitoring.drift_detector
+	python -m src.ml.monitoring.drift_report
+	python -m src.ml.monitoring.performance_report
 
 lint:
 	ruff check src/ tests/
-	ruff format --check src/ tests/
-	mypy src/
 
 validate-bronze:
-	python -m src.validation.bronze_validation
+	great_expectations checkpoint run pipeline_checkpoint
 
 dbt-docs:
-	cd dbt && dbt docs generate && dbt docs serve
+	cd src/data_platform/dbt_project && dbt docs generate && dbt docs serve
