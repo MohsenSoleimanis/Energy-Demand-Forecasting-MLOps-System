@@ -16,7 +16,7 @@ with raw_weather as (
         cast(cloud_cover as double) as cloud_cover,
         cast(pressure_msl as double) as pressure_msl,
         cast(ingestion_ts as timestamp) as ingestion_ts
-    from {{ source('bronze', 'weather_actual') }}
+    from read_parquet('s3://lakehouse/bronze/weather_actual/**/*.parquet', hive_partitioning=true)
 ),
 
 with_timezone as (
@@ -55,7 +55,6 @@ final as (
         precipitation,
         cloud_cover,
         pressure_msl,
-        -- Compute feels-like temperature
         case
             when temperature_2m < 10 and wind_speed_10m > 5 then
                 13.12
@@ -69,7 +68,6 @@ final as (
                 - 4.0
             else temperature_2m
         end as feels_like_temp,
-        -- Flag anomalous weather readings
         case
             when temperature_2m < -30 or temperature_2m > 50 then true
             when relative_humidity_2m < 0 or relative_humidity_2m > 100 then true

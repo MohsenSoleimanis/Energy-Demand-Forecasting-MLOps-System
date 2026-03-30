@@ -10,7 +10,7 @@ with raw_generation as (
         cast(fuel_type as varchar) as fuel_type,
         cast(generation_mw as double) as generation_mw,
         cast(ingestion_ts as timestamp) as ingestion_ts
-    from {{ source('bronze', 'entsoe_generation') }}
+    from read_parquet('s3://lakehouse/bronze/entsoe_generation/**/*.parquet', hive_partitioning=true)
 ),
 
 with_timezone as (
@@ -22,7 +22,6 @@ with_timezone as (
     from raw_generation
 ),
 
--- Deduplicate per timestamp + fuel_type by latest ingestion
 deduplicated as (
     select
         *,
@@ -42,7 +41,6 @@ clean as (
     where rn = 1
 ),
 
--- Aggregate by timestamp: pivot fuel types into metrics
 aggregated as (
     select
         timestamp_brussels,

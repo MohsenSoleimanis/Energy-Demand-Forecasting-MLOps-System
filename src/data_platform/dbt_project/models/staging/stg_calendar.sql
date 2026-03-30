@@ -14,7 +14,7 @@ with raw_calendar as (
         cast(is_school_vacation as boolean) as is_school_vacation,
         cast(month as integer) as month,
         cast(week_of_year as integer) as week_of_year
-    from {{ source('bronze', 'calendar') }}
+    from read_parquet('s3://lakehouse/bronze/calendar/*.parquet')
 )
 
 select * from raw_calendar

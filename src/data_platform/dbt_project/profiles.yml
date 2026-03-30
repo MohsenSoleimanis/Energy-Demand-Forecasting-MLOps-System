@@ -3,10 +3,9 @@ energy_demand:
   outputs:
     dev:
       type: duckdb
-      path: /tmp/energy_demand.duckdb
+      path: energy_demand.duckdb
       extensions:
         - httpfs
-        - parquet
       settings:
         s3_region: us-east-1
         s3_endpoint: localhost:9000

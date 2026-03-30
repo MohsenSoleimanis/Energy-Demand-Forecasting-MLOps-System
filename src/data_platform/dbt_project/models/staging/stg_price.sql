@@ -9,7 +9,7 @@ with raw_price as (
         cast(timestamp_utc as timestamp) as timestamp_utc,
         cast(price_eur_mwh as double) as price_eur_mwh,
         cast(ingestion_ts as timestamp) as ingestion_ts
-    from {{ source('bronze', 'entsoe_price') }}
+    from read_parquet('s3://lakehouse/bronze/entsoe_price/**/*.parquet', hive_partitioning=true)
 ),
 
 with_timezone as (
@@ -20,7 +20,6 @@ with_timezone as (
     from raw_price
 ),
 
--- Deduplicate by keeping the latest ingestion per timestamp
 deduplicated as (
     select
         timestamp_brussels,
@@ -37,7 +36,6 @@ final as (
     select
         timestamp_brussels,
         price_eur_mwh,
-        -- Flag extreme prices but keep negative prices (they are valid market signals)
         case
             when price_eur_mwh > 500 or price_eur_mwh < -100 then true
             else false
