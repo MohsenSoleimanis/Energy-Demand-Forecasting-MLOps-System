@@ -50,7 +50,8 @@ def pull_gold(
 
     if duckdb_path is None:
         duckdb_path = os.getenv(
-            "DUCKDB_PATH", str(PROJECT_ROOT / "data" / "energy.duckdb")
+            "DUCKDB_PATH",
+            str(PROJECT_ROOT / "src" / "data_platform" / "dbt_project" / "energy_demand.duckdb"),
         )
 
     logger.info("Connecting to DuckDB at %s", duckdb_path)
@@ -74,15 +75,18 @@ def pull_gold(
             pass  # Extensions may already be loaded
 
         # Try gold schema first, then fall back to default schema
-        try:
-            df = con.execute(
-                "SELECT * FROM gold.training_set ORDER BY timestamp_brussels"
-            ).fetchdf()
-        except duckdb.CatalogException:
-            logger.warning(
-                "Schema 'gold' not found, trying default schema..."
-            )
-            df = con.execute("SELECT * FROM training_set").fetchdf()
+        # Try different schema names (dbt may prefix with 'main_')
+        for schema in ["main_gold", "gold", "main"]:
+            try:
+                query = f"SELECT * FROM {schema}.training_set ORDER BY timestamp_brussels"
+                df = con.execute(query).fetchdf()
+                logger.info("Found training_set in schema '%s'", schema)
+                break
+            except (duckdb.CatalogException, duckdb.BinderException):
+                continue
+        else:
+            # Last resort: no schema prefix
+            df = con.execute("SELECT * FROM training_set ORDER BY timestamp_brussels").fetchdf()
 
         logger.info(
             "Pulled %d rows, %d columns from training_set", len(df), len(df.columns)
