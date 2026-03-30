@@ -108,9 +108,19 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 def _predict_single(request: PredictionRequest) -> PredictionResponse:
     """Run prediction for a single request. Assumes _model is not None."""
+    from src.ml.features.feature_engineering import get_feature_columns
+
     df = pd.DataFrame([request.model_dump()])
     df = prepare_features(df, mode="serving")
-    prediction = _model.predict(df)
+
+    # Only pass feature columns to the model (no timestamps, no non-numeric)
+    feature_cols = [c for c in get_feature_columns() if c in df.columns]
+    # Fill missing features with 0 (optional fields not provided by client)
+    for col in get_feature_columns():
+        if col not in df.columns:
+            df[col] = 0.0
+    feature_cols = get_feature_columns()
+    prediction = _model.predict(df[feature_cols])
     predicted_load = float(prediction[0])
     PREDICTION_VALUE.observe(predicted_load)
     return PredictionResponse(
