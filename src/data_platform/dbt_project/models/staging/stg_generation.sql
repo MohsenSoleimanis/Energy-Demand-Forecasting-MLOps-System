@@ -24,7 +24,10 @@ with_timezone as (
 
 deduplicated as (
     select
-        *,
+        timestamp_brussels,
+        fuel_type,
+        generation_mw,
+        ingestion_ts,
         row_number() over (
             partition by timestamp_brussels, fuel_type
             order by ingestion_ts desc

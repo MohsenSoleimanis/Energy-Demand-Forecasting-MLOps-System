@@ -36,7 +36,16 @@ with_timezone as (
 
 deduplicated as (
     select
-        *,
+        timestamp_brussels,
+        temperature_2m,
+        relative_humidity_2m,
+        wind_speed_10m,
+        wind_direction_10m,
+        shortwave_radiation,
+        precipitation,
+        cloud_cover,
+        pressure_msl,
+        ingestion_ts,
         row_number() over (
             partition by timestamp_brussels
             order by ingestion_ts desc
