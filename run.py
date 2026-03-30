@@ -48,7 +48,7 @@ def check_tool(name: str, install_hint: str) -> bool:
 
 
 def ensure_env():
-    """Ensure .env exists."""
+    """Ensure .env exists and load it into os.environ."""
     env_file = ROOT / ".env"
     example = ROOT / ".env.example"
     if not env_file.exists():
@@ -59,6 +59,13 @@ def ensure_env():
         else:
             print("Error: No .env or .env.example found.")
             sys.exit(1)
+    # Load all env vars
+    import os
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip())
 
 
 # ---------------------------------------------------------------------------
@@ -111,17 +118,6 @@ def cmd_status(_args):
 def cmd_ingest(args):
     """Run data ingestion scripts."""
     ensure_env()
-
-    # Load .env into environment
-    env_file = ROOT / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, val = line.partition("=")
-                import os
-                os.environ.setdefault(key.strip(), val.strip())
-
     source = getattr(args, "source", None)
 
     if source is None or source == "entsoe":
@@ -155,6 +151,7 @@ def cmd_transform(_args):
 
 def cmd_train(_args):
     """Run the ML training pipeline."""
+    ensure_env()
     run(f"{sys.executable} -m src.ml.training.pull_gold", check=False)
     run(f"{sys.executable} -m src.ml.training.train")
     print("\nTraining complete. Check MLflow at http://localhost:5000")
