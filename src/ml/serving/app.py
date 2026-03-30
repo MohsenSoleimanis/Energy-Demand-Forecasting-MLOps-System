@@ -67,6 +67,13 @@ def _set_model(model, model_version):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the production model on startup."""
+    # Ensure MLflow can reach MinIO for artifact storage
+    import os
+    os.environ.setdefault("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    os.environ.setdefault("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+    os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
+    os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "minioadmin")
+
     logger.info("Loading production model from MLflow registry ...")
     model, version = load_production_model(_model_name)
     _set_model(model, version)
