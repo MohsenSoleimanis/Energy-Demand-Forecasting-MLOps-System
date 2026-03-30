@@ -149,6 +149,13 @@ def train() -> str:
     target_col = "target_load_24h"
     feature_cols = [c for c in get_feature_columns() if c in df.columns]
 
+    # Log which features are used and which are missing
+    all_expected = get_feature_columns()
+    missing = [c for c in all_expected if c not in df.columns]
+    if missing:
+        logger.warning("Missing features (will be excluded): %s", missing)
+    logger.info("Using %d features: %s", len(feature_cols), feature_cols)
+
     X_train = df.loc[train_mask, feature_cols]
     y_train = df.loc[train_mask, target_col]
     X_val = df.loc[val_mask, feature_cols]

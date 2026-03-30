@@ -142,9 +142,7 @@ def prepare_features(df: pd.DataFrame, mode: str = "training") -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 _FEATURE_COLUMNS: list[str] = [
-    # --- raw / base ---
-    "load_mw",
-    "price_eur_mwh",
+    # --- weather (forecast available 24h ahead) ---
     "temperature_2m",
     "feels_like_temp",
     "wind_speed_10m",
@@ -153,22 +151,19 @@ _FEATURE_COLUMNS: list[str] = [
     "precipitation",
     "cloud_cover",
     "pressure_msl",
-    "renewable_share_pct",
-    "nuclear_mw",
-    "gas_mw",
+    # --- calendar (known in advance) ---
     "is_belgian_holiday",
     "is_weekend",
     "is_school_vacation",
     "day_of_week",
     "month",
     "hour_of_day",
-    # --- lag ---
-    "load_lag_1h",
+    # --- lag features (available 24h+ before target) ---
     "load_lag_24h",
     "load_lag_168h",
     "price_lag_24h",
     "temp_lag_24h",
-    # --- rolling ---
+    # --- rolling (computed from data available before prediction) ---
     "load_rolling_mean_24h",
     "load_rolling_std_24h",
     "load_rolling_mean_168h",
