@@ -9,8 +9,16 @@ with load_data as (
     where is_valid = true
 ),
 
+price_data as (
+    select * from {{ ref('stg_price') }}
+),
+
 weather_data as (
     select * from {{ ref('stg_weather') }}
+),
+
+generation_data as (
+    select * from {{ ref('stg_generation') }}
 ),
 
 calendar_data as (
@@ -21,8 +29,7 @@ final as (
     select
         l.timestamp_brussels,
         l.load_mw,
-        -- Price: NULL until ENTSO-E price data is ingested
-        NULL::double as price_eur_mwh,
+        p.price_eur_mwh,
         w.temperature_2m,
         w.feels_like_temp,
         w.wind_speed_10m,
@@ -31,10 +38,9 @@ final as (
         w.precipitation,
         w.cloud_cover,
         w.pressure_msl,
-        -- Generation: NULL until ENTSO-E generation data is ingested
-        NULL::double as renewable_share_pct,
-        NULL::double as nuclear_mw,
-        NULL::double as gas_mw,
+        g.renewable_share_pct,
+        g.nuclear_mw,
+        g.gas_mw,
         c.is_belgian_holiday,
         c.is_weekend,
         c.is_school_vacation,
@@ -45,8 +51,12 @@ final as (
         w.is_anomalous as weather_is_anomalous
 
     from load_data l
+    left join price_data p
+        on l.timestamp_brussels = p.timestamp_brussels
     left join weather_data w
         on l.timestamp_brussels = w.timestamp_brussels
+    left join generation_data g
+        on l.timestamp_brussels = g.timestamp_brussels
     left join calendar_data c
         on cast(l.timestamp_brussels as date) = c.date
 )

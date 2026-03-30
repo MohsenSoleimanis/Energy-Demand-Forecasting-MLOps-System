@@ -208,6 +208,63 @@ def parse_args():
     return parser.parse_args()
 
 
+def _generate_monthly_ranges(
+    start: pd.Timestamp, end: pd.Timestamp,
+) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """Split a date range into monthly chunks for ENTSO-E API compatibility.
+
+    ENTSO-E rejects requests spanning more than ~1 year for some endpoints.
+    Monthly chunks keep requests small and reliable.
+    """
+    ranges = []
+    current = start
+    while current < end:
+        month_end = (current + pd.offsets.MonthEnd(1)).normalize() + pd.Timedelta(days=1)
+        month_end = month_end.tz_localize(current.tzinfo) if month_end.tzinfo is None else month_end
+        chunk_end = min(month_end, end)
+        ranges.append((current, chunk_end))
+        current = chunk_end
+    return ranges
+
+
+def _ingest_chunked(
+    client: EntsoePandasClient,
+    fetch_fn,
+    prefix: str,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    label: str,
+) -> int:
+    """Fetch data in monthly chunks, upload each chunk, continue on partial failures."""
+    ranges = _generate_monthly_ranges(start, end)
+    total_rows = 0
+    failed_ranges = []
+
+    for i, (chunk_start, chunk_end) in enumerate(ranges, 1):
+        logger.info(
+            "[%s] Chunk %d/%d: %s -> %s",
+            label, i, len(ranges), chunk_start.date(), chunk_end.date(),
+        )
+        try:
+            df = fetch_fn(client, chunk_start, chunk_end)
+            if len(df) > 0:
+                upload_partitioned_by_date(df, prefix)
+                total_rows += len(df)
+        except Exception as exc:
+            logger.warning("[%s] Chunk %d failed: %s", label, i, exc)
+            failed_ranges.append((chunk_start, chunk_end))
+            time.sleep(2)  # Brief pause before next chunk
+
+    if failed_ranges:
+        logger.warning(
+            "[%s] %d/%d chunks failed: %s",
+            label, len(failed_ranges), len(ranges),
+            [(str(s.date()), str(e.date())) for s, e in failed_ranges],
+        )
+    logger.info("[%s] Complete: %d rows ingested", label, total_rows)
+    return total_rows
+
+
 def main():
     args = parse_args()
     start = pd.Timestamp(args.start_date, tz=TIMEZONE)
@@ -217,28 +274,13 @@ def main():
     client = _get_client()
 
     # 1. Actual load
-    try:
-        load_df = fetch_load(client, start, end)
-        upload_partitioned_by_date(load_df, "bronze/entsoe_load/")
-        logger.info("Load ingestion complete: %d rows", len(load_df))
-    except Exception:
-        logger.exception("Failed to ingest load data")
+    _ingest_chunked(client, fetch_load, "bronze/entsoe_load/", start, end, "load")
 
     # 2. Day-ahead prices
-    try:
-        price_df = fetch_day_ahead_prices(client, start, end)
-        upload_partitioned_by_date(price_df, "bronze/entsoe_price/")
-        logger.info("Price ingestion complete: %d rows", len(price_df))
-    except Exception:
-        logger.exception("Failed to ingest price data")
+    _ingest_chunked(client, fetch_day_ahead_prices, "bronze/entsoe_price/", start, end, "price")
 
     # 3. Generation by fuel type
-    try:
-        gen_df = fetch_generation(client, start, end)
-        upload_partitioned_by_date(gen_df, "bronze/entsoe_generation/")
-        logger.info("Generation ingestion complete: %d rows", len(gen_df))
-    except Exception:
-        logger.exception("Failed to ingest generation data")
+    _ingest_chunked(client, fetch_generation, "bronze/entsoe_generation/", start, end, "generation")
 
     logger.info("ENTSO-E ingestion finished.")
 
