@@ -6,7 +6,7 @@
 
 with raw_weather as (
     select
-        cast(timestamp_utc as timestamp) as timestamp_utc,
+        cast(timestamp_utc as timestamp) as ts_utc,
         cast(temperature_2m as double) as temperature_2m,
         cast(relative_humidity_2m as double) as relative_humidity_2m,
         cast(wind_speed_10m as double) as wind_speed_10m,
@@ -21,7 +21,7 @@ with raw_weather as (
 
 with_timezone as (
     select
-        date_trunc('hour', timestamp_utc + interval '1 hour') as timestamp_brussels,
+        cast(timezone('Europe/Brussels', timezone('UTC', ts_utc)) as timestamp) as timestamp_brussels,
         temperature_2m,
         relative_humidity_2m,
         wind_speed_10m,
