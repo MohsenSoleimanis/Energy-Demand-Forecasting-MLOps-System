@@ -113,14 +113,13 @@ def _predict_single(request: PredictionRequest) -> PredictionResponse:
     df = pd.DataFrame([request.model_dump()])
     df = prepare_features(df, mode="serving")
 
-    # Only pass feature columns to the model (no timestamps, no non-numeric)
-    feature_cols = [c for c in get_feature_columns() if c in df.columns]
-    # Fill missing features with 0 (optional fields not provided by client)
+    # Ensure all feature columns exist and are numeric
     for col in get_feature_columns():
         if col not in df.columns:
             df[col] = 0.0
-    feature_cols = get_feature_columns()
-    prediction = _model.predict(df[feature_cols])
+        else:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+    prediction = _model.predict(df[get_feature_columns()])
     predicted_load = float(prediction[0])
     PREDICTION_VALUE.observe(predicted_load)
     return PredictionResponse(
