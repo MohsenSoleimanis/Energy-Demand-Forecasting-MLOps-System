@@ -16,7 +16,7 @@ clean-targets:
 models:
   energy_demand:
     staging:
-      +materialized: view
+      +materialized: table
       +schema: silver
     marts:
       +materialized: table
