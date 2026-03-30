@@ -21,7 +21,7 @@ with raw_weather as (
 
 with_timezone as (
     select
-        {{ timezone_convert('timestamp_utc') }} as timestamp_brussels,
+        date_trunc('hour', timestamp_utc + interval '1 hour') as timestamp_brussels,
         temperature_2m,
         relative_humidity_2m,
         wind_speed_10m,
