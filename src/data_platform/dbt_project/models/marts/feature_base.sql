@@ -5,20 +5,44 @@
 }}
 
 with load_data as (
-    select * from {{ ref('stg_load') }}
+    select
+        timestamp_brussels::timestamp as timestamp_brussels,
+        load_mw,
+        is_valid,
+        is_interpolated
+    from {{ ref('stg_load') }}
     where is_valid = true
 ),
 
 price_data as (
-    select * from {{ ref('stg_price') }}
+    select
+        timestamp_brussels::timestamp as timestamp_brussels,
+        price_eur_mwh
+    from {{ ref('stg_price') }}
 ),
 
 weather_data as (
-    select * from {{ ref('stg_weather') }}
+    select
+        timestamp_brussels::timestamp as timestamp_brussels,
+        temperature_2m,
+        feels_like_temp,
+        wind_speed_10m,
+        wind_direction_10m,
+        shortwave_radiation,
+        precipitation,
+        cloud_cover,
+        pressure_msl,
+        is_anomalous
+    from {{ ref('stg_weather') }}
 ),
 
 generation_data as (
-    select * from {{ ref('stg_generation') }}
+    select
+        timestamp_brussels::timestamp as timestamp_brussels,
+        renewable_share_pct,
+        nuclear_mw,
+        gas_mw
+    from {{ ref('stg_generation') }}
 ),
 
 calendar_data as (
@@ -58,7 +82,7 @@ final as (
     left join generation_data g
         on l.timestamp_brussels = g.timestamp_brussels
     left join calendar_data c
-        on cast(l.timestamp_brussels as date) = c.date
+        on l.timestamp_brussels::date = c.date
 )
 
 select * from final
