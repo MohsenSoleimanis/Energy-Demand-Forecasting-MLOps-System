@@ -19,14 +19,20 @@ import lightgbm as lgb
 import matplotlib
 
 matplotlib.use("Agg")
+import json
+
 import matplotlib.pyplot as plt
 import mlflow
 import mlflow.lightgbm
 import numpy as np
 import pandas as pd
-import shap
 import yaml
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+try:
+    import shap
+except ImportError:
+    shap = None
 
 from src.ml.features.feature_engineering import get_feature_columns
 
@@ -248,20 +254,22 @@ def train() -> str:
         mlflow.log_artifact(str(fi_path))
 
         # --- SHAP summary ---
-        try:
-            explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X_test.head(500))
-            fig = plt.figure(figsize=(10, 8))
-            shap.summary_plot(shap_values, X_test.head(500), show=False)
-            shap_path = plots_dir / "shap_summary.png"
-            plt.savefig(shap_path, dpi=150, bbox_inches="tight")
-            plt.close()
-            mlflow.log_artifact(str(shap_path))
-        except Exception as exc:
-            logger.warning("SHAP summary plot failed: %s", exc)
+        if shap is not None:
+            try:
+                explainer = shap.TreeExplainer(model)
+                shap_values = explainer.shap_values(X_test.head(500))
+                fig = plt.figure(figsize=(10, 8))
+                shap.summary_plot(shap_values, X_test.head(500), show=False)
+                shap_path = plots_dir / "shap_summary.png"
+                plt.savefig(shap_path, dpi=150, bbox_inches="tight")
+                plt.close()
+                mlflow.log_artifact(str(shap_path))
+            except Exception as exc:
+                logger.warning("SHAP summary plot failed: %s", exc)
+        else:
+            logger.info("SHAP not installed, skipping explainability plot")
 
         # --- Save metrics JSON for DVC pipeline ---
-        import json
         metrics_dir = PROJECT_ROOT / "metrics"
         metrics_dir.mkdir(exist_ok=True)
         train_metrics = {

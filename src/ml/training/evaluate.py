@@ -24,8 +24,12 @@ import mlflow
 import mlflow.lightgbm
 import numpy as np
 import pandas as pd
-import shap
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+try:
+    import shap
+except ImportError:
+    shap = None
 
 from src.ml.features.feature_engineering import get_feature_columns
 
@@ -111,6 +115,9 @@ def plot_residuals_over_time(
 
 
 def plot_shap_summary(model, X: pd.DataFrame, plots_dir: Path) -> str | None:
+    if shap is None:
+        logger.info("SHAP not installed, skipping explainability plot")
+        return None
     try:
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X.head(500))
