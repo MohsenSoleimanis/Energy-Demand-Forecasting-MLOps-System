@@ -118,6 +118,8 @@ def train() -> str:
     cfg = _load_config()
     model_cfg = cfg["model"]
     split_cfg = cfg["split"]
+    random_seed = cfg.get("random_seed", model_cfg.get("random_seed", 42))
+    early_stopping = model_cfg.get("early_stopping_rounds", cfg.get("early_stopping_rounds", 50))
 
     # --- Load data ---
     data_path = PROJECT_ROOT / "data" / "gold" / "training_set.parquet"
@@ -160,11 +162,8 @@ def train() -> str:
     )
 
     # --- MLflow ---
-    mlflow_cfg = cfg.get("mlflow", {})
-    mlflow.set_tracking_uri(
-        mlflow_cfg.get("tracking_uri", os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
-    )
-    mlflow.set_experiment(mlflow_cfg.get("experiment_name", "energy-demand-forecast"))
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
+    mlflow.set_experiment(cfg.get("experiment_name", "energy-demand-forecast"))
 
     with mlflow.start_run() as run:
         run_id = run.info.run_id
@@ -181,14 +180,14 @@ def train() -> str:
                 "min_child_samples": model_cfg["min_child_samples"],
                 "reg_alpha": model_cfg["reg_alpha"],
                 "reg_lambda": model_cfg["reg_lambda"],
-                "random_seed": model_cfg["random_seed"],
+                "random_seed": random_seed,
                 "train_end": str(split_cfg["train_end"]),
                 "val_end": str(split_cfg["val_end"]),
                 "n_features": len(feature_cols),
                 "n_train": len(X_train),
                 "n_val": len(X_val),
                 "n_test": len(X_test),
-                "early_stopping_rounds": cfg.get("early_stopping_rounds", 50),
+                "early_stopping_rounds": early_stopping,
             }
         )
 
@@ -207,12 +206,12 @@ def train() -> str:
             min_child_samples=model_cfg["min_child_samples"],
             reg_alpha=model_cfg["reg_alpha"],
             reg_lambda=model_cfg["reg_lambda"],
-            random_state=model_cfg["random_seed"],
+            random_state=random_seed,
             verbose=-1,
         )
 
         callbacks = [
-            lgb.early_stopping(stopping_rounds=cfg.get("early_stopping_rounds", 50)),
+            lgb.early_stopping(stopping_rounds=early_stopping),
             lgb.log_evaluation(period=100),
         ]
 
