@@ -38,7 +38,7 @@ class ForecastUser(HttpUser):
     def predict(self) -> None:
         """Send a prediction request (highest frequency task)."""
         self.client.post(
-            "/predict",
+            "/v1/predict",
             json=SAMPLE_REQUEST,
             headers={"X-API-Key": API_KEY},
         )

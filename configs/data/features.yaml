@@ -1,0 +1,77 @@
+# Feature engineering configuration — Single Source of Truth
+# All window sizes, lag periods, and the canonical feature column list.
+
+lag_features:
+  # Only lags >= 24h are safe for a 24-hour-ahead forecast
+  load_lags: [24, 168]         # 24h and 7-day load lags
+  price_lags: [24]             # 24h price lag
+  temp_lags: [24]              # 24h temperature lag
+
+rolling_features:
+  load_windows: [24, 168]      # 24h and 7-day rolling stats on load
+  temp_windows: [24]           # 24h rolling stats on temperature
+  min_periods: 1
+
+cyclical_features:
+  hour_period: 24
+  month_period: 12
+
+interaction_features:
+  - ["temperature_2m", "hour_of_day"]
+  - ["wind_speed_10m", "shortwave_radiation"]
+
+monitored_features:
+  - temperature_2m
+  - relative_humidity_2m
+  - wind_speed_10m
+  - wind_direction_10m
+  - shortwave_radiation
+  - precipitation
+  - cloud_cover
+  - pressure_msl
+
+target:
+  column: "target_load_24h"
+  horizon_hours: 24
+
+# Canonical ordered list of model input features.
+# RULES:
+#   - NO load_mw (that is the raw measurement, unavailable at prediction time)
+#   - NO load_lag_1h (only 1 hour lag — not available 24h ahead)
+#   - NO price_eur_mwh (raw price — use price_lag_24h instead)
+#   - Every feature here MUST be available at least 24h before the target hour
+feature_columns:
+  # --- weather (forecast available 24h ahead) ---
+  - temperature_2m
+  - feels_like_temp
+  - wind_speed_10m
+  - wind_direction_10m
+  - shortwave_radiation
+  - precipitation
+  - cloud_cover
+  - pressure_msl
+  # --- calendar (known in advance) ---
+  - is_belgian_holiday
+  - is_weekend
+  - is_school_vacation
+  - day_of_week
+  - month
+  - hour_of_day
+  # --- lag features (>= 24h lag, safe for 24h-ahead forecast) ---
+  - load_lag_24h
+  - load_lag_168h
+  - price_lag_24h
+  - temp_lag_24h
+  # --- rolling statistics (computed from data available before prediction) ---
+  - load_rolling_mean_24h
+  - load_rolling_std_24h
+  - load_rolling_mean_168h
+  - temp_rolling_mean_24h
+  # --- cyclical encodings ---
+  - hour_sin
+  - hour_cos
+  - month_sin
+  - month_cos
+  # --- interaction terms ---
+  - temp_x_hour
+  - wind_x_radiation

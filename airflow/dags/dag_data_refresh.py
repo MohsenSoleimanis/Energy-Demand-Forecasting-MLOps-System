@@ -1,7 +1,8 @@
 """ORCH-001: Daily Data Refresh DAG.
 
-Runs daily at 02:00 UTC. Ingests load and weather data,
-then runs dbt transformations through silver and gold layers.
+Runs daily at 02:00 UTC. Ingests load and weather data, backfills any
+previously failed chunks, then runs dbt transformations through silver
+and gold layers.
 """
 
 from datetime import datetime, timedelta
@@ -39,6 +40,11 @@ with DAG(
         bash_command="cd /app && python -m src.data_platform.ingestion.weather",
     )
 
+    backfill_entsoe = BashOperator(
+        task_id="backfill_entsoe",
+        bash_command="cd /app && python -m src.data_platform.ingestion.backfill",
+    )
+
     dbt_run = BashOperator(
         task_id="dbt_run",
         bash_command="cd /app/dbt && dbt run --profiles-dir /app/dbt/profiles",
@@ -49,4 +55,4 @@ with DAG(
         bash_command="cd /app/dbt && dbt test --profiles-dir /app/dbt/profiles",
     )
 
-    ingest_entsoe >> ingest_weather >> dbt_run >> dbt_test
+    [ingest_entsoe, ingest_weather] >> backfill_entsoe >> dbt_run >> dbt_test

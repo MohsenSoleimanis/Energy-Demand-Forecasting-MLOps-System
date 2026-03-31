@@ -72,7 +72,7 @@ class TestHealthEndpoint:
 
 class TestPredictEndpoint:
     def test_predict_valid_input(self, test_client, sample_prediction_request, auth_headers):
-        response = test_client.post("/predict", json=sample_prediction_request, headers=auth_headers)
+        response = test_client.post("/v1/predict", json=sample_prediction_request, headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert "predicted_load_mw" in data
@@ -80,7 +80,7 @@ class TestPredictEndpoint:
 
     def test_predict_invalid_temperature(self, test_client, sample_prediction_request, auth_headers):
         sample_prediction_request["temperature_2m"] = 100.0
-        response = test_client.post("/predict", json=sample_prediction_request, headers=auth_headers)
+        response = test_client.post("/v1/predict", json=sample_prediction_request, headers=auth_headers)
         assert response.status_code == 422
 
 
@@ -98,13 +98,13 @@ class TestMetricsEndpoint:
 class TestAuthEndpoints:
     def test_predict_without_key_returns_401(self, test_client, sample_prediction_request):
         """Predict without API key should return 401."""
-        response = test_client.post("/predict", json=sample_prediction_request)
+        response = test_client.post("/v1/predict", json=sample_prediction_request)
         assert response.status_code == 401
 
     def test_predict_wrong_key_returns_403(self, test_client, sample_prediction_request):
         """Predict with wrong API key should return 403."""
         response = test_client.post(
-            "/predict",
+            "/v1/predict",
             json=sample_prediction_request,
             headers={"X-API-Key": "wrong-key"},
         )

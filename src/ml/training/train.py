@@ -18,10 +18,13 @@ import os
 import platform
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import lightgbm as lgb
 import mlflow
 import mlflow.lightgbm
+import mlflow.sklearn
+import numpy as np
 import pandas as pd
 
 from src.ml.features.engineering import get_feature_columns
@@ -29,7 +32,14 @@ from src.ml.training.data import (
     get_feature_target_split,
     load_training_data,
     temporal_split,
+    walk_forward_cv,
 )
+from src.ml.training.models import (
+    WeightedEnsemble,
+    build_ensemble,
+    get_model_builder,
+)
+from src.shared.business_metrics import compute_imbalance_cost
 from src.shared.config import load_config
 from src.shared.metrics import compute_regression_metrics
 
@@ -77,46 +87,52 @@ def _resolve_feature_cols(df: pd.DataFrame) -> list[str]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def build_model(config: dict) -> lgb.LGBMRegressor:
-    """Construct a LightGBM regressor from *config* without fitting.
+def build_model(config: dict, model_type: str = "lightgbm") -> Any:
+    """Construct an un-fitted model from *config*.
 
     Args:
         config: Full training configuration dict (loaded from YAML).
+        model_type: One of ``lightgbm``, ``xgboost``, ``ridge``.
 
     Returns:
-        An un-fitted ``LGBMRegressor``.
+        An un-fitted sklearn-compatible regressor.
     """
-    model_cfg = config["model"]
-    return lgb.LGBMRegressor(
-        n_estimators=model_cfg["n_estimators"],
-        learning_rate=model_cfg["learning_rate"],
-        max_depth=model_cfg["max_depth"],
-        num_leaves=model_cfg["num_leaves"],
-        subsample=model_cfg["subsample"],
-        colsample_bytree=model_cfg["colsample_bytree"],
-        min_child_samples=model_cfg["min_child_samples"],
-        reg_alpha=model_cfg["reg_alpha"],
-        reg_lambda=model_cfg["reg_lambda"],
-        random_state=config["random_seed"],
-        verbose=-1,
-    )
+    if model_type == "lightgbm":
+        model_cfg = config["model"]
+        return lgb.LGBMRegressor(
+            n_estimators=model_cfg["n_estimators"],
+            learning_rate=model_cfg["learning_rate"],
+            max_depth=model_cfg["max_depth"],
+            num_leaves=model_cfg["num_leaves"],
+            subsample=model_cfg["subsample"],
+            colsample_bytree=model_cfg["colsample_bytree"],
+            min_child_samples=model_cfg["min_child_samples"],
+            reg_alpha=model_cfg["reg_alpha"],
+            reg_lambda=model_cfg["reg_lambda"],
+            random_state=config["random_seed"],
+            verbose=-1,
+        )
+    builder = get_model_builder(model_type)
+    model_cfg = config.get("model", {})
+    return builder(model_cfg, random_seed=config["random_seed"])
 
 
 def train_model(
-    model: lgb.LGBMRegressor,
+    model: Any,
     X_train: pd.DataFrame,
     y_train: pd.Series,
     X_val: pd.DataFrame,
     y_val: pd.Series,
     config: dict,
-) -> lgb.LGBMRegressor:
+) -> Any:
     """Fit *model* with early stopping on the validation set.
 
-    MLflow LightGBM autologging captures per-iteration metrics
-    automatically, replacing the need for manual callbacks.
+    For LightGBM, uses native early stopping callbacks.  For other
+    sklearn-compatible models (XGBoost, Ridge), falls back to a plain
+    ``.fit()`` call.
 
     Args:
-        model: Un-fitted ``LGBMRegressor`` (from :func:`build_model`).
+        model: Un-fitted estimator (from :func:`build_model`).
         X_train: Training features.
         y_train: Training target.
         X_val: Validation features.
@@ -124,19 +140,23 @@ def train_model(
         config: Full training configuration dict.
 
     Returns:
-        The fitted ``LGBMRegressor``.
+        The fitted model.
     """
-    early_stopping_rounds = config["model"]["early_stopping_rounds"]
-    model.fit(
-        X_train,
-        y_train,
-        eval_set=[(X_val, y_val)],
-        eval_names=["val"],
-        callbacks=[
-            lgb.early_stopping(stopping_rounds=early_stopping_rounds),
-            lgb.log_evaluation(period=50),
-        ],
-    )
+    if isinstance(model, lgb.LGBMRegressor):
+        early_stopping_rounds = config["model"]["early_stopping_rounds"]
+        model.fit(
+            X_train,
+            y_train,
+            eval_set=[(X_val, y_val)],
+            eval_names=["val"],
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=early_stopping_rounds),
+                lgb.log_evaluation(period=50),
+            ],
+        )
+    else:
+        # XGBoost and Ridge use plain fit
+        model.fit(X_train, y_train)
     return model
 
 
@@ -213,18 +233,225 @@ def tune_hyperparameters(
     return study.best_params
 
 
-def run_training_pipeline(tune: bool = False) -> str:
+# ---------------------------------------------------------------------------
+# Cross-validation
+# ---------------------------------------------------------------------------
+
+def run_cross_validation(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    target_col: str,
+    config: dict,
+    model_type: str = "lightgbm",
+) -> dict[str, Any]:
+    """Run walk-forward cross-validation and return aggregated metrics.
+
+    Trains a fresh model on each fold's expanding training window and
+    evaluates on the fixed validation window.  Logs per-fold metrics as
+    nested MLflow runs.
+
+    Args:
+        df: Full sorted DataFrame.
+        feature_cols: Feature column names.
+        target_col: Target column name.
+        config: Full training configuration dict.
+        model_type: Model architecture to use per fold.
+
+    Returns:
+        Dictionary with per-fold metrics, mean/std MAPE, and a
+        ``cv_passed`` boolean from the stability quality gate.
+
+    Raises:
+        ValueError: If the dataset is too small for the requested splits.
+    """
+    ensemble_cfg = load_config(ENSEMBLE_CONFIG_PATH)
+    cv_cfg = ensemble_cfg.get("cross_validation", {})
+
+    n_splits = cv_cfg.get("n_splits", 5)
+    min_train_size = cv_cfg.get("min_train_size", 8000)
+    val_size = cv_cfg.get("val_size", 720)
+    gap_hours = cv_cfg.get("gap_hours", 24)
+    max_mape_std = cv_cfg.get("max_mape_std", 0.02)
+
+    splits = walk_forward_cv(
+        df,
+        n_splits=n_splits,
+        min_train_size=min_train_size,
+        val_size=val_size,
+        gap_hours=gap_hours,
+    )
+
+    fold_metrics: list[dict[str, float]] = []
+    fold_mapes: list[float] = []
+
+    for i, split in enumerate(splits):
+        logger.info(
+            "CV fold %d/%d: train=%d rows, val=%d rows, "
+            "train_end=%s, val_start=%s",
+            i + 1, len(splits),
+            len(split["train_idx"]), len(split["val_idx"]),
+            split["train_end"], split["val_start"],
+        )
+
+        train_fold = df.iloc[split["train_idx"]]
+        val_fold = df.iloc[split["val_idx"]]
+
+        X_tr, y_tr = get_feature_target_split(train_fold, feature_cols, target_col)
+        X_va, y_va = get_feature_target_split(val_fold, feature_cols, target_col)
+
+        model = build_model(config, model_type=model_type)
+        model = train_model(model, X_tr, y_tr, X_va, y_va, config)
+
+        y_pred = model.predict(X_va)
+        metrics = compute_regression_metrics(y_va.values, y_pred)
+        biz = compute_imbalance_cost(y_va.values, y_pred)
+        metrics.update(biz)
+
+        # Log per-fold metrics as nested run
+        with mlflow.start_run(nested=True, run_name=f"cv-fold-{i}"):
+            for k, v in metrics.items():
+                mlflow.log_metric(f"fold_{k}", v)
+            mlflow.log_params({
+                "fold": i,
+                "train_size": len(split["train_idx"]),
+                "val_size": len(split["val_idx"]),
+                "train_end": str(split["train_end"]),
+                "val_start": str(split["val_start"]),
+                "val_end": str(split["val_end"]),
+            })
+
+        fold_metrics.append(metrics)
+        fold_mapes.append(metrics["mape"])
+
+    # Aggregate
+    mean_mape = float(np.mean(fold_mapes))
+    std_mape = float(np.std(fold_mapes))
+    cv_passed = std_mape <= max_mape_std
+
+    mlflow.log_metric("cv_mean_mape", mean_mape)
+    mlflow.log_metric("cv_std_mape", std_mape)
+    mlflow.log_metric("cv_n_folds", len(splits))
+    mlflow.set_tag("cv_passed", str(cv_passed))
+
+    if not cv_passed:
+        logger.warning(
+            "CV stability check FAILED: std(MAPE)=%.4f > threshold=%.4f. "
+            "Model predictions are unstable across time windows.",
+            std_mape, max_mape_std,
+        )
+    else:
+        logger.info(
+            "CV stability check passed: std(MAPE)=%.4f <= threshold=%.4f",
+            std_mape, max_mape_std,
+        )
+
+    return {
+        "fold_metrics": fold_metrics,
+        "fold_mapes": fold_mapes,
+        "cv_mean_mape": mean_mape,
+        "cv_std_mape": std_mape,
+        "cv_max_mape_std_threshold": max_mape_std,
+        "cv_passed": cv_passed,
+        "n_folds": len(splits),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Ensemble training
+# ---------------------------------------------------------------------------
+
+def _build_and_train_ensemble(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    config: dict,
+) -> WeightedEnsemble:
+    """Build and train a weighted ensemble from ensemble config.
+
+    Reads model definitions from ``configs/training/ensemble.yaml``,
+    trains each sub-model independently, and combines them via
+    :class:`WeightedEnsemble`.
+
+    Args:
+        X_train: Training features.
+        y_train: Training target.
+        X_val: Validation features.
+        y_val: Validation target.
+        config: Base training configuration dict (lightgbm.yaml).
+
+    Returns:
+        A fitted ``WeightedEnsemble`` instance.
+    """
+    ensemble_cfg = load_config(ENSEMBLE_CONFIG_PATH)
+    model_defs = ensemble_cfg["ensemble"]["models"]
+
+    trained_models: list[tuple[str, Any]] = []
+    weights: list[float] = []
+
+    for model_def in model_defs:
+        mtype = model_def["type"]
+        weight = model_def.get("weight", 1.0 / len(model_defs))
+
+        # Resolve model config: either inline or referenced from base config
+        if "config_key" in model_def:
+            model_cfg = config[model_def["config_key"]]
+        else:
+            model_cfg = model_def.get("config", {})
+
+        logger.info("Training ensemble member: %s (weight=%.2f)", mtype, weight)
+        builder = get_model_builder(mtype)
+        sub_model = builder(model_cfg, random_seed=config["random_seed"])
+
+        # Train with appropriate strategy
+        if isinstance(sub_model, lgb.LGBMRegressor):
+            early_stopping_rounds = config["model"].get("early_stopping_rounds", 50)
+            sub_model.fit(
+                X_train, y_train,
+                eval_set=[(X_val, y_val)],
+                eval_names=["val"],
+                callbacks=[
+                    lgb.early_stopping(stopping_rounds=early_stopping_rounds),
+                    lgb.log_evaluation(period=50),
+                ],
+            )
+        else:
+            sub_model.fit(X_train, y_train)
+
+        trained_models.append((mtype, sub_model))
+        weights.append(weight)
+
+    # Normalise weights
+    total_weight = sum(weights)
+    weights = [w / total_weight for w in weights]
+
+    return build_ensemble(trained_models, weights)
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline
+# ---------------------------------------------------------------------------
+
+def run_training_pipeline(
+    tune: bool = False,
+    cv: bool = False,
+    model_type: str = "lightgbm",
+) -> str:
     """Orchestrate the full training pipeline.
 
     1. Load config and data.
     2. Split temporally.
-    3. Optionally tune hyperparameters.
-    4. Train final model.
-    5. Log metrics and model to MLflow.
-    6. Write ``run_id`` to ``metrics/run_id.txt`` for DVC.
+    3. Optionally run walk-forward cross-validation.
+    4. Optionally tune hyperparameters.
+    5. Train final model (single or ensemble).
+    6. Compute ML and business metrics, log to MLflow.
+    7. Write ``run_id`` to ``metrics/run_id.txt`` for DVC.
 
     Args:
         tune: If ``True``, run Optuna before final training.
+        cv: If ``True``, run walk-forward cross-validation.
+        model_type: One of ``lightgbm``, ``xgboost``, ``ridge``,
+            ``ensemble``.
 
     Returns:
         The MLflow run ID.
@@ -251,6 +478,18 @@ def run_training_pipeline(tune: bool = False) -> str:
 
     with mlflow.start_run() as run:
         run_id = run.info.run_id
+        mlflow.set_tag("model_type", model_type)
+
+        # -- optional cross-validation --
+        cv_results: dict[str, Any] | None = None
+        if cv:
+            logger.info("Running walk-forward cross-validation ...")
+            cv_results = run_cross_validation(
+                df, feature_cols, target_col, cfg, model_type=model_type,
+            )
+            mlflow.set_tag("cv_enabled", "True")
+        else:
+            mlflow.set_tag("cv_enabled", "False")
 
         # -- optional tuning --
         if tune:
@@ -263,10 +502,14 @@ def run_training_pipeline(tune: bool = False) -> str:
             mlflow.set_tag("tuned", "False")
 
         # -- build and train --
-        model = build_model(cfg)
-        model = train_model(model, X_train, y_train, X_val, y_val, cfg)
+        if model_type == "ensemble":
+            logger.info("Training weighted ensemble ...")
+            model = _build_and_train_ensemble(X_train, y_train, X_val, y_val, cfg)
+        else:
+            model = build_model(cfg, model_type=model_type)
+            model = train_model(model, X_train, y_train, X_val, y_val, cfg)
 
-        # -- metrics --
+        # -- ML metrics --
         val_metrics = compute_regression_metrics(y_val.values, model.predict(X_val))
         test_metrics = compute_regression_metrics(y_test.values, model.predict(X_test))
 
@@ -278,40 +521,76 @@ def run_training_pipeline(tune: bool = False) -> str:
         logger.info("Validation metrics: %s", val_metrics)
         logger.info("Test metrics: %s", test_metrics)
 
+        # -- business metrics --
+        val_biz = compute_imbalance_cost(y_val.values, model.predict(X_val))
+        test_biz = compute_imbalance_cost(y_test.values, model.predict(X_test))
+
+        for k, v in val_biz.items():
+            mlflow.log_metric(f"val_{k}", v)
+        for k, v in test_biz.items():
+            mlflow.log_metric(f"test_{k}", v)
+
+        logger.info("Validation business metrics: %s", val_biz)
+        logger.info("Test business metrics: %s", test_biz)
+
         # -- log model artifact with signature --
         from mlflow.models.signature import infer_signature
 
-        signature = infer_signature(X_train.head(5), model.predict(X_train.head(5)))
-        mlflow.lightgbm.log_model(
-            model,
-            artifact_path="model",
-            signature=signature,
-            input_example=X_train.head(1),
-        )
+        if model_type == "ensemble":
+            # Ensemble is not natively serialisable by MLflow;
+            # log each sub-model individually and store weights as param
+            for name, sub_model in model.models:
+                if isinstance(sub_model, lgb.LGBMRegressor):
+                    mlflow.lightgbm.log_model(
+                        sub_model, artifact_path=f"model_{name}",
+                    )
+            mlflow.log_params({
+                f"ensemble_weight_{name}": w
+                for (name, _), w in zip(model.models, model.weights)
+            })
+        else:
+            signature = infer_signature(
+                X_train.head(5), model.predict(X_train.head(5)),
+            )
+            if isinstance(model, lgb.LGBMRegressor):
+                mlflow.lightgbm.log_model(
+                    model,
+                    artifact_path="model",
+                    signature=signature,
+                    input_example=X_train.head(1),
+                )
+            else:
+                mlflow.sklearn.log_model(
+                    model,
+                    artifact_path="model",
+                    signature=signature,
+                    input_example=X_train.head(1),
+                )
 
         # -- train quantile models for uncertainty estimation (P10/P50/P90) --
-        early_stopping_rounds = cfg["model"]["early_stopping_rounds"]
-        model_params = {
-            k: v for k, v in cfg["model"].items()
-            if k not in ("objective", "early_stopping_rounds")
-        }
-        quantiles: dict[str, float] = {"p10": 0.1, "p50": 0.5, "p90": 0.9}
-        for name, alpha in quantiles.items():
-            logger.info("Training quantile model %s (alpha=%.1f) ...", name, alpha)
-            q_model = lgb.LGBMRegressor(
-                objective="quantile",
-                alpha=alpha,
-                **model_params,
-                random_state=cfg["random_seed"],
-                verbose=-1,
-            )
-            q_model.fit(
-                X_train, y_train,
-                eval_set=[(X_val, y_val)],
-                callbacks=[lgb.early_stopping(early_stopping_rounds, verbose=False)],
-            )
-            mlflow.lightgbm.log_model(q_model, artifact_path=f"model_{name}")
-            logger.info("Quantile model %s logged to MLflow", name)
+        if model_type == "lightgbm":
+            early_stopping_rounds = cfg["model"]["early_stopping_rounds"]
+            model_params = {
+                k: v for k, v in cfg["model"].items()
+                if k not in ("objective", "early_stopping_rounds")
+            }
+            quantiles: dict[str, float] = {"p10": 0.1, "p50": 0.5, "p90": 0.9}
+            for name, alpha in quantiles.items():
+                logger.info("Training quantile model %s (alpha=%.1f) ...", name, alpha)
+                q_model = lgb.LGBMRegressor(
+                    objective="quantile",
+                    alpha=alpha,
+                    **model_params,
+                    random_state=cfg["random_seed"],
+                    verbose=-1,
+                )
+                q_model.fit(
+                    X_train, y_train,
+                    eval_set=[(X_val, y_val)],
+                    callbacks=[lgb.early_stopping(early_stopping_rounds, verbose=False)],
+                )
+                mlflow.lightgbm.log_model(q_model, artifact_path=f"model_{name}")
+                logger.info("Quantile model %s logged to MLflow", name)
 
         # -- log split boundaries and metadata --
         mlflow.log_params({
@@ -328,7 +607,10 @@ def run_training_pipeline(tune: bool = False) -> str:
 
         # -- save for DVC pipeline --
         METRICS_DIR.mkdir(exist_ok=True)
-        _write_metrics_json(run_id, X_train, val_metrics, test_metrics)
+        _write_metrics_json(
+            run_id, X_train, val_metrics, test_metrics,
+            val_biz=val_biz, test_biz=test_biz, cv_results=cv_results,
+        )
         (METRICS_DIR / "run_id.txt").write_text(run_id)
 
         logger.info("Training complete. MLflow run_id=%s", run_id)
@@ -340,14 +622,27 @@ def _write_metrics_json(
     X_train: pd.DataFrame,
     val_metrics: dict[str, float],
     test_metrics: dict[str, float],
+    val_biz: dict[str, float] | None = None,
+    test_biz: dict[str, float] | None = None,
+    cv_results: dict[str, Any] | None = None,
 ) -> None:
     """Persist metrics JSON for the DVC pipeline."""
-    payload = {
+    payload: dict[str, Any] = {
         "run_id": run_id,
         "training_rows": len(X_train),
         **{f"val_{k}": v for k, v in val_metrics.items()},
         **{f"test_{k}": v for k, v in test_metrics.items()},
     }
+    if val_biz:
+        payload.update({f"val_{k}": v for k, v in val_biz.items()})
+    if test_biz:
+        payload.update({f"test_{k}": v for k, v in test_biz.items()})
+    if cv_results:
+        payload["cv_mean_mape"] = cv_results["cv_mean_mape"]
+        payload["cv_std_mape"] = cv_results["cv_std_mape"]
+        payload["cv_passed"] = cv_results["cv_passed"]
+        payload["cv_n_folds"] = cv_results["n_folds"]
+        payload["cv_fold_mapes"] = cv_results["fold_mapes"]
     with open(METRICS_DIR / "train_metrics.json", "w") as f:
         json.dump(payload, f, indent=2)
 
@@ -360,15 +655,29 @@ def main() -> None:
     """CLI entry point for ``python -m src.ml.training.train``."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Train LightGBM energy demand model")
+    parser = argparse.ArgumentParser(
+        description="Train energy demand forecasting model",
+    )
     parser.add_argument(
         "--tune", action="store_true",
         help="Run Optuna hyperparameter tuning before final training",
     )
+    parser.add_argument(
+        "--cv", action="store_true",
+        help="Run walk-forward cross-validation before final training",
+    )
+    parser.add_argument(
+        "--model-type",
+        choices=["lightgbm", "xgboost", "ridge", "ensemble"],
+        default="lightgbm",
+        help="Model architecture to train (default: lightgbm)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-    run_id = run_training_pipeline(tune=args.tune)
+    run_id = run_training_pipeline(
+        tune=args.tune, cv=args.cv, model_type=args.model_type,
+    )
     print(f"Training finished. MLflow run_id: {run_id}")
 
 

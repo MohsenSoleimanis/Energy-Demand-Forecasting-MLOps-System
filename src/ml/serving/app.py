@@ -31,7 +31,7 @@ from pathlib import Path
 
 import mlflow
 import pandas as pd
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -97,8 +97,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             ).set(1)
     except Exception:
         logger.warning(
-            "No production model available. /predict will return 503 "
-            "until a model is loaded via POST /model/reload."
+            "No production model available. /v1/predict will return 503 "
+            "until a model is loaded via POST /v1/model/reload."
         )
 
     service.load_shadow()
@@ -294,9 +294,12 @@ def _predict_single(
 
 
 # ---------------------------------------------------------------------------
-# Endpoints
+# Versioned router (v1)
 # ---------------------------------------------------------------------------
-@app.post("/predict", response_model=PredictionResponse)
+v1_router = APIRouter(prefix="/v1", tags=["v1"])
+
+
+@v1_router.post("/predict", response_model=PredictionResponse)
 async def predict(
     request: PredictionRequest,
     _key: str = Depends(require_api_key),
@@ -308,24 +311,24 @@ async def predict(
     if not service.is_ready:
         raise HTTPException(
             status_code=503,
-            detail="Model not loaded. Call POST /model/reload first.",
+            detail="Model not loaded. Call POST /v1/model/reload first.",
         )
     start: float = time.time()
     try:
         response = _predict_single(request, service, pred_logger, feature_store)
-        PREDICTION_COUNT.labels(endpoint="/predict", status="success").inc()
+        PREDICTION_COUNT.labels(endpoint="/v1/predict", status="success").inc()
         return response
     except HTTPException:
         raise
     except Exception as exc:
-        PREDICTION_COUNT.labels(endpoint="/predict", status="error").inc()
+        PREDICTION_COUNT.labels(endpoint="/v1/predict", status="error").inc()
         logger.exception("Prediction failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
-        PREDICTION_LATENCY.labels(endpoint="/predict").observe(time.time() - start)
+        PREDICTION_LATENCY.labels(endpoint="/v1/predict").observe(time.time() - start)
 
 
-@app.post("/predict/batch", response_model=list[PredictionResponse])
+@v1_router.post("/predict/batch", response_model=list[PredictionResponse])
 async def predict_batch(
     request: BatchPredictionRequest,
     _key: str = Depends(require_api_key),
@@ -337,7 +340,7 @@ async def predict_batch(
     if not service.is_ready:
         raise HTTPException(
             status_code=503,
-            detail="Model not loaded. Call POST /model/reload first.",
+            detail="Model not loaded. Call POST /v1/model/reload first.",
         )
     start: float = time.time()
     try:
@@ -345,20 +348,66 @@ async def predict_batch(
             _predict_single(r, service, pred_logger, feature_store)
             for r in request.predictions
         ]
-        PREDICTION_COUNT.labels(endpoint="/predict/batch", status="success").inc()
+        PREDICTION_COUNT.labels(endpoint="/v1/predict/batch", status="success").inc()
         return responses
     except HTTPException:
         raise
     except Exception as exc:
-        PREDICTION_COUNT.labels(endpoint="/predict/batch", status="error").inc()
+        PREDICTION_COUNT.labels(endpoint="/v1/predict/batch", status="error").inc()
         logger.exception("Batch prediction failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
-        PREDICTION_LATENCY.labels(endpoint="/predict/batch").observe(
+        PREDICTION_LATENCY.labels(endpoint="/v1/predict/batch").observe(
             time.time() - start
         )
 
 
+@v1_router.get("/model/info", response_model=ModelInfoResponse)
+async def model_info(
+    _key: str = Depends(require_api_key),
+    service: ModelService = Depends(get_model_service),
+) -> ModelInfoResponse:
+    """Return metadata about the currently loaded model."""
+    if not service.is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not loaded. Call POST /v1/model/reload first.",
+        )
+    run = service._client.get_run(service.production_version.run_id)
+    return ModelInfoResponse(
+        model_name=service.model_name,
+        model_version=service.production_version.version,
+        metrics=run.data.metrics,
+        tags=run.data.tags,
+    )
+
+
+@v1_router.post("/model/reload", response_model=HealthResponse)
+async def reload_model(
+    _key: str = Depends(require_api_key),
+    service: ModelService = Depends(get_model_service),
+) -> HealthResponse:
+    """Hot-reload the production model from MLflow registry."""
+    logger.info("Reloading production model ...")
+    service.reload()
+    MODEL_VERSION_GAUGE.labels(
+        model_name=service.model_name,
+        version=service.production_version.version,
+    ).set(1)
+    logger.info("Model reloaded: version %s", service.production_version.version)
+    return HealthResponse(
+        status="healthy",
+        model_version=service.production_version.version,
+        model_alias="production",
+    )
+
+
+app.include_router(v1_router)
+
+
+# ---------------------------------------------------------------------------
+# Root endpoints (unversioned -- infrastructure)
+# ---------------------------------------------------------------------------
 @app.get("/health", response_model=HealthResponse)
 async def health(
     service: ModelService = Depends(get_model_service),
@@ -379,44 +428,4 @@ async def metrics() -> PlainTextResponse:
     return PlainTextResponse(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST,
-    )
-
-
-@app.get("/model/info", response_model=ModelInfoResponse)
-async def model_info(
-    _key: str = Depends(require_api_key),
-    service: ModelService = Depends(get_model_service),
-) -> ModelInfoResponse:
-    """Return metadata about the currently loaded model."""
-    if not service.is_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not loaded. Call POST /model/reload first.",
-        )
-    run = service._client.get_run(service.production_version.run_id)
-    return ModelInfoResponse(
-        model_name=service.model_name,
-        model_version=service.production_version.version,
-        metrics=run.data.metrics,
-        tags=run.data.tags,
-    )
-
-
-@app.post("/model/reload", response_model=HealthResponse)
-async def reload_model(
-    _key: str = Depends(require_api_key),
-    service: ModelService = Depends(get_model_service),
-) -> HealthResponse:
-    """Hot-reload the production model from MLflow registry."""
-    logger.info("Reloading production model ...")
-    service.reload()
-    MODEL_VERSION_GAUGE.labels(
-        model_name=service.model_name,
-        version=service.production_version.version,
-    ).set(1)
-    logger.info("Model reloaded: version %s", service.production_version.version)
-    return HealthResponse(
-        status="healthy",
-        model_version=service.production_version.version,
-        model_alias="production",
     )

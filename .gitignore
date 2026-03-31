@@ -16,11 +16,11 @@ build/
 .mypy_cache/
 .ruff_cache/
 
-# Data
-data/
+# Runtime data (not configs/data/ which has YAML configs)
+/data/
 *.duckdb
 *.duckdb.wal
-data/**/*.parquet
+/data/**/*.parquet
 
 # DVC cache (not the lock file - dvc.lock must be tracked)
 /tmp/dvc
