@@ -1,0 +1,30 @@
+# Ensemble configuration
+# Combines multiple model architectures via weighted averaging.
+#
+# Each model entry specifies its type, prediction weight, and either
+# a config_key (referencing a section in lightgbm.yaml) or inline config.
+
+ensemble:
+  enabled: false  # Set to true to train ensemble
+  models:
+    - type: lightgbm
+      weight: 0.5
+      config_key: model  # uses model section from lightgbm.yaml
+    - type: xgboost
+      weight: 0.3
+      config:
+        n_estimators: 800
+        learning_rate: 0.05
+        max_depth: 6
+    - type: ridge
+      weight: 0.2
+      config:
+        alpha: 1.0
+
+# Cross-validation settings (used with --cv flag)
+cross_validation:
+  n_splits: 5
+  min_train_size: 8000
+  val_size: 720       # ~1 month of hourly data
+  gap_hours: 24       # gap prevents lag feature leakage
+  max_mape_std: 0.02  # quality gate: reject if std(MAPE) > threshold

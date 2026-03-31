@@ -133,6 +133,18 @@ class PredictionResponse(BaseModel):
         default_factory=datetime.utcnow,
         description="UTC wall-clock time when the prediction was made.",
     )
+    predicted_load_p10_mw: float | None = Field(
+        default=None,
+        description="10th percentile prediction (lower bound) in MW.",
+    )
+    predicted_load_p50_mw: float | None = Field(
+        default=None,
+        description="50th percentile (median) prediction in MW.",
+    )
+    predicted_load_p90_mw: float | None = Field(
+        default=None,
+        description="90th percentile prediction (upper bound) in MW.",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -143,6 +155,9 @@ class PredictionResponse(BaseModel):
                     "model_version": "5",
                     "prediction_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
                     "predicted_at": "2025-01-15T12:30:00",
+                    "predicted_load_p10_mw": 9200.1,
+                    "predicted_load_p50_mw": 9640.0,
+                    "predicted_load_p90_mw": 10050.5,
                 }
             ]
         }

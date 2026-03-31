@@ -153,7 +153,7 @@ def register_model(run_id: str) -> None:
     version = mv.version
     logger.info("Registered model version %s", version)
 
-    alias = "candidate" if not beats_prod else "candidate"
+    alias = "candidate" if not beats_prod else "production"
     client.set_registered_model_alias(model_name, alias, version)
     logger.info("Set alias '%s' on version %s", alias, version)
 

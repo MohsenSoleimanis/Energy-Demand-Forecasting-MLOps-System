@@ -2,102 +2,82 @@ version: 2
 
 sources:
   - name: bronze
-    description: Raw data ingested from external APIs into the bronze layer (MinIO/S3)
-    freshness:
-      warn_after:
-        count: 12
-        period: hour
-      error_after:
-        count: 24
-        period: hour
+    description: Raw data from external APIs
     loaded_at_field: ingestion_ts
+    freshness:
+      warn_after: {count: 6, period: hour}
+      error_after: {count: 24, period: hour}
 
     tables:
       - name: entsoe_load
-        description: Raw ENTSO-E electricity load data for Belgium (15-min resolution)
-        external_location: "read_parquet('s3://lakehouse/bronze/entsoe_load/**/*.parquet')"
+        description: ENTSO-E actual load (15-min or hourly)
         columns:
           - name: timestamp_utc
-            description: UTC timestamp of the load measurement
+            tests:
+              - not_null
           - name: load_mw
-            description: Electricity load in megawatts
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 20000
           - name: area_code
-            description: ENTSO-E area code (BE)
-          - name: ingestion_ts
-            description: Timestamp when the data was ingested
-          - name: source_version
-            description: Version of the ingestion library
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ["BE"]
 
       - name: entsoe_price
-        description: Raw ENTSO-E day-ahead electricity prices for Belgium
-        external_location: "read_parquet('s3://lakehouse/bronze/entsoe_price/**/*.parquet')"
+        description: ENTSO-E day-ahead prices
         columns:
           - name: timestamp_utc
-            description: UTC timestamp of the price
+            tests:
+              - not_null
           - name: price_eur_mwh
-            description: Day-ahead price in EUR per MWh
-          - name: area_code
-            description: ENTSO-E area code (BE)
-          - name: ingestion_ts
-            description: Timestamp when the data was ingested
+            tests:
+              - not_null
+              # Prices can be negative but rarely below -500
+              - dbt_utils.accepted_range:
+                  min_value: -500
+                  max_value: 4000
 
       - name: entsoe_generation
-        description: Raw ENTSO-E generation data by fuel type for Belgium
-        external_location: "read_parquet('s3://lakehouse/bronze/entsoe_generation/**/*.parquet')"
+        description: ENTSO-E generation by fuel type
         columns:
           - name: timestamp_utc
-            description: UTC timestamp of the generation measurement
+            tests:
+              - not_null
           - name: fuel_type
-            description: Type of fuel or generation source
+            tests:
+              - not_null
           - name: generation_mw
-            description: Generation output in megawatts
-          - name: area_code
-            description: ENTSO-E area code (BE)
-          - name: ingestion_ts
-            description: Timestamp when the data was ingested
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
 
       - name: weather_actual
-        description: Raw weather observation data for Brussels from Open-Meteo
-        external_location: "read_parquet('s3://lakehouse/bronze/weather_actual/**/*.parquet')"
+        description: Open-Meteo historical weather
         columns:
           - name: timestamp_utc
-            description: UTC timestamp of the weather observation
+            tests:
+              - not_null
           - name: temperature_2m
-            description: Temperature at 2 meters above ground (C)
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: -40
+                  max_value: 55
           - name: relative_humidity_2m
-            description: Relative humidity at 2 meters (%)
-          - name: wind_speed_10m
-            description: Wind speed at 10 meters (km/h)
-          - name: wind_direction_10m
-            description: Wind direction at 10 meters (degrees)
-          - name: shortwave_radiation
-            description: Shortwave solar radiation (W/m2)
-          - name: precipitation
-            description: Precipitation (mm)
-          - name: cloud_cover
-            description: Total cloud cover (%)
-          - name: pressure_msl
-            description: Mean sea level pressure (hPa)
-          - name: ingestion_ts
-            description: Timestamp when the data was ingested
+            tests:
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 100
 
       - name: calendar
-        description: Calendar reference data with Belgian holidays and school vacations
-        external_location: "read_parquet('s3://lakehouse/bronze/calendar/**/*.parquet')"
+        description: Belgian calendar with holidays
         columns:
           - name: date
-            description: Calendar date
-          - name: is_belgian_holiday
-            description: Whether the day is a Belgian public holiday
-          - name: holiday_name
-            description: Name of the holiday if applicable
-          - name: day_of_week
-            description: Day of the week (0=Monday, 6=Sunday)
-          - name: is_weekend
-            description: Whether the day is a weekend
-          - name: is_school_vacation
-            description: Whether the day falls in a Flemish school vacation period
-          - name: month
-            description: Month number (1-12)
-          - name: week_of_year
-            description: ISO week number
+            tests:
+              - not_null
+              - unique

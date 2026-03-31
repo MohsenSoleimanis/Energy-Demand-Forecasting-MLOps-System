@@ -1,11 +1,13 @@
-"""LightGBM model building, training, and Optuna hyperparameter tuning.
+"""Model building, training, cross-validation, and Optuna hyperparameter tuning.
 
-This module is responsible ONLY for constructing and fitting models.
-Data loading lives in ``data.py``; evaluation lives in ``evaluate.py``.
+Supports LightGBM (default), XGBoost, Ridge, and weighted ensemble via
+the ``--model-type`` flag.  Walk-forward cross-validation is available
+with ``--cv``.  Data loading lives in ``data.py``; evaluation lives in
+``evaluate.py``.
 
 Usage::
 
-    python -m src.ml.training.train [--tune]
+    python -m src.ml.training.train [--tune] [--cv] [--model-type lightgbm]
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_PATH = PROJECT_ROOT / "configs" / "training" / "lightgbm.yaml"
+ENSEMBLE_CONFIG_PATH = PROJECT_ROOT / "configs" / "training" / "ensemble.yaml"
 DATA_PATH = PROJECT_ROOT / "data" / "gold" / "training_set.parquet"
 METRICS_DIR = PROJECT_ROOT / "metrics"
 
@@ -275,8 +278,40 @@ def run_training_pipeline(tune: bool = False) -> str:
         logger.info("Validation metrics: %s", val_metrics)
         logger.info("Test metrics: %s", test_metrics)
 
-        # -- log model artifact --
-        mlflow.lightgbm.log_model(model, artifact_path="model")
+        # -- log model artifact with signature --
+        from mlflow.models.signature import infer_signature
+
+        signature = infer_signature(X_train.head(5), model.predict(X_train.head(5)))
+        mlflow.lightgbm.log_model(
+            model,
+            artifact_path="model",
+            signature=signature,
+            input_example=X_train.head(1),
+        )
+
+        # -- train quantile models for uncertainty estimation (P10/P50/P90) --
+        early_stopping_rounds = cfg["model"]["early_stopping_rounds"]
+        model_params = {
+            k: v for k, v in cfg["model"].items()
+            if k not in ("objective", "early_stopping_rounds")
+        }
+        quantiles: dict[str, float] = {"p10": 0.1, "p50": 0.5, "p90": 0.9}
+        for name, alpha in quantiles.items():
+            logger.info("Training quantile model %s (alpha=%.1f) ...", name, alpha)
+            q_model = lgb.LGBMRegressor(
+                objective="quantile",
+                alpha=alpha,
+                **model_params,
+                random_state=cfg["random_seed"],
+                verbose=-1,
+            )
+            q_model.fit(
+                X_train, y_train,
+                eval_set=[(X_val, y_val)],
+                callbacks=[lgb.early_stopping(early_stopping_rounds, verbose=False)],
+            )
+            mlflow.lightgbm.log_model(q_model, artifact_path=f"model_{name}")
+            logger.info("Quantile model %s logged to MLflow", name)
 
         # -- log split boundaries and metadata --
         mlflow.log_params({

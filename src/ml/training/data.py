@@ -87,6 +87,82 @@ def temporal_split(
     return train_df, val_df, test_df, boundaries
 
 
+def walk_forward_cv(
+    df: pd.DataFrame,
+    n_splits: int = 5,
+    min_train_size: int = 8000,
+    val_size: int = 720,
+    gap_hours: int = 24,
+) -> list[dict]:
+    """Generate walk-forward cross-validation splits for time series.
+
+    Each fold has an expanding training window and a fixed-size validation
+    window. A gap between train and val prevents information leakage from
+    lag features (our model uses 24h lags, so gap must be >= 24h).
+
+    Args:
+        df: Sorted DataFrame with ``timestamp_brussels``.
+        n_splits: Number of CV folds.
+        min_train_size: Minimum training set size (rows).
+        val_size: Validation window size (rows).
+        gap_hours: Gap between train end and val start (rows, hourly data).
+
+    Returns:
+        List of dicts with ``train_idx``, ``val_idx``, ``train_end``,
+        ``val_start``, ``val_end``.
+
+    Raises:
+        ValueError: If the dataset is too small for the requested splits.
+    """
+    n = len(df)
+    min_required = min_train_size + gap_hours + val_size
+    if n < min_required:
+        raise ValueError(
+            f"Dataset has {n} rows but needs at least {min_required} "
+            f"(min_train_size={min_train_size} + gap={gap_hours} + "
+            f"val_size={val_size})."
+        )
+
+    usable = n - min_train_size - gap_hours - val_size
+    if usable < 0:
+        raise ValueError(
+            f"Not enough data for even one split. "
+            f"Need {min_required} rows, have {n}."
+        )
+
+    step = max(usable // max(n_splits - 1, 1), 1) if n_splits > 1 else 0
+    splits: list[dict] = []
+
+    for i in range(n_splits):
+        split_point = min_train_size + i * step
+        val_start_idx = split_point + gap_hours
+        val_end_idx = val_start_idx + val_size
+
+        if val_end_idx > n:
+            logger.warning(
+                "Fold %d would exceed dataset length (%d > %d), stopping.",
+                i, val_end_idx, n,
+            )
+            break
+
+        train_idx = list(range(0, split_point))
+        val_idx = list(range(val_start_idx, val_end_idx))
+
+        splits.append({
+            "train_idx": train_idx,
+            "val_idx": val_idx,
+            "train_end": df["timestamp_brussels"].iloc[split_point - 1],
+            "val_start": df["timestamp_brussels"].iloc[val_start_idx],
+            "val_end": df["timestamp_brussels"].iloc[val_end_idx - 1],
+        })
+
+    logger.info(
+        "Generated %d walk-forward CV splits (min_train=%d, val=%d, gap=%d)",
+        len(splits), min_train_size, val_size, gap_hours,
+    )
+    return splits
+
+
 def get_feature_target_split(
     df: pd.DataFrame,
     feature_cols: list[str],

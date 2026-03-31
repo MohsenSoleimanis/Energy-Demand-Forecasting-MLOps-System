@@ -336,6 +336,25 @@ def _ingest_chunked(
             label, len(failed_ranges), len(ranges),
             [(str(s.date()), str(e.date())) for s, e in failed_ranges],
         )
+        # Persist failed ranges as a manifest so backfill.py can retry later
+        import json
+        from datetime import datetime
+
+        from src.shared.s3 import create_s3_client
+
+        manifest = {
+            "dataset": label,
+            "timestamp": datetime.utcnow().isoformat(),
+            "failed_ranges": [(str(s), str(e)) for s, e in failed_ranges],
+        }
+        s3 = create_s3_client()
+        key = f"bronze/_manifests/{label}_failed_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+        s3.put_object(
+            Bucket=bucket, Key=key,
+            Body=json.dumps(manifest).encode(),
+        )
+        logger.warning("Wrote failed ranges manifest to s3://%s/%s", bucket, key)
+
     logger.info("[%s] Complete: %d rows ingested", label, total_rows)
     return total_rows
 

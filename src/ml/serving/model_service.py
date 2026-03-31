@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import mlflow
 import pandas as pd
@@ -39,6 +39,7 @@ class ModelService:
         self.production_version: object | None = None
         self.shadow_model: object | None = None
         self.shadow_version: object | None = None
+        self.quantile_models: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Loading
@@ -62,6 +63,8 @@ class ModelService:
                 self.model_name,
                 self.production_version.version,
             )
+            # Load optional quantile models for confidence intervals
+            self._load_quantile_models()
         except Exception as exc:
             self.production_model = None
             self.production_version = None
@@ -91,6 +94,21 @@ class ModelService:
             self.shadow_model = None
             self.shadow_version = None
 
+    def _load_quantile_models(self) -> None:
+        """Load quantile regression models for P10/P50/P90 confidence intervals.
+
+        This is best-effort: quantile models are optional.  If any
+        model fails to load, it is silently skipped.
+        """
+        self.quantile_models = {}
+        for q in ["p10", "p50", "p90"]:
+            try:
+                uri = f"models:/{self.model_name}@production-{q}"
+                self.quantile_models[q] = mlflow.lightgbm.load_model(uri)
+                logger.info("Loaded quantile model %s (%s)", self.model_name, q)
+            except Exception:
+                logger.debug("Quantile model '%s' not available (optional)", q)
+
     # ------------------------------------------------------------------
     # Prediction
     # ------------------------------------------------------------------
@@ -115,6 +133,27 @@ class ModelService:
             )
         prediction = self.production_model.predict(features)
         return float(prediction[0])
+
+    def predict_quantiles(self, features: pd.DataFrame) -> dict[str, float]:
+        """Run quantile models and return P10/P50/P90 predictions.
+
+        Args:
+            features: A single-row DataFrame with all required feature
+                columns.
+
+        Returns:
+            Dict mapping quantile names (``"p10"``, ``"p50"``, ``"p90"``)
+            to predicted load values.  Only includes quantiles whose
+            models are loaded.
+        """
+        results: dict[str, float] = {}
+        for q, model in self.quantile_models.items():
+            try:
+                pred = model.predict(features)
+                results[q] = float(pred[0])
+            except Exception as exc:
+                logger.debug("Quantile prediction failed for %s: %s", q, exc)
+        return results
 
     def shadow_predict(self, features: pd.DataFrame) -> float | None:
         """Run the shadow model on *features*.

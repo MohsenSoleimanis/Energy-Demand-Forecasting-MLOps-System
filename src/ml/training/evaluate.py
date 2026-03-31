@@ -32,6 +32,7 @@ from src.ml.training.data import (  # noqa: E402
     load_training_data,
     temporal_split,
 )
+from src.shared.business_metrics import compute_imbalance_cost  # noqa: E402
 from src.shared.config import load_config  # noqa: E402
 from src.shared.metrics import compute_regression_metrics  # noqa: E402
 
@@ -304,6 +305,10 @@ def run_evaluation(run_id: str | None = None) -> dict:
     # -- global metrics (SSoT: shared utility) --
     metrics: dict = compute_regression_metrics(y_test.values, y_pred)
 
+    # -- business metrics (asymmetric imbalance cost) --
+    biz_metrics = compute_imbalance_cost(y_test.values, y_pred)
+    metrics.update(biz_metrics)
+
     # -- sliced metrics --
     sliced = _sliced_metrics(y_test.values, y_pred, timestamps)
     metrics.update(sliced)
@@ -325,6 +330,16 @@ def run_evaluation(run_id: str | None = None) -> dict:
     with mlflow.start_run(run_id=run_id):
         for k in ("mae", "rmse", "mape", "r2", "mae_weekend", "mae_weekday"):
             mlflow.log_metric(f"test_{k}", metrics[k])
+        # -- log business metrics --
+        for k in (
+            "total_imbalance_cost_eur",
+            "avg_hourly_cost_eur",
+            "under_forecast_cost_eur",
+            "over_forecast_cost_eur",
+            "n_under_forecast_hours",
+            "n_over_forecast_hours",
+        ):
+            mlflow.log_metric(k, metrics[k])
         for path in artifact_paths:
             mlflow.log_artifact(str(path), artifact_path="plots")
         mlflow.log_artifact(str(metrics_path))

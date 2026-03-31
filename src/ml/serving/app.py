@@ -5,13 +5,20 @@ manages the lifespan (creating services and storing them on
 ``app.state``), and defines endpoints that delegate all business
 logic to injected services.
 
-Endpoints:
-    POST /predict         - Single prediction
-    POST /predict/batch   - Batch predictions (max 1000)
-    GET  /health          - Health check with model info
-    GET  /metrics         - Prometheus metrics
-    GET  /model/info      - Model metadata from MLflow registry
-    POST /model/reload    - Hot-reload the production model
+All business endpoints live under a versioned ``/v1/`` prefix via
+``APIRouter``.  Infrastructure endpoints (``/health``, ``/metrics``)
+remain at the root so load-balancers and probes work without a
+version prefix.
+
+Versioned endpoints (v1):
+    POST /v1/predict         - Single prediction
+    POST /v1/predict/batch   - Batch predictions (max 1000)
+    GET  /v1/model/info      - Model metadata from MLflow registry
+    POST /v1/model/reload    - Hot-reload the production model
+
+Root endpoints (unversioned):
+    GET  /health             - Health check with model info
+    GET  /metrics            - Prometheus metrics
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.ml.features.engineering import get_feature_columns, prepare_features
+from src.ml.features.feature_store import FeatureStore
 from src.ml.serving.auth import require_api_key
 from src.ml.serving.metrics import (
     MODEL_VERSION_GAUGE,
@@ -114,9 +122,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("Failed to initialize prediction logger: %s", exc)
         app.state.prediction_logger = None
 
+    # -- FeatureStore --
+    try:
+        feature_store = FeatureStore()
+        app.state.feature_store = feature_store
+        logger.info("Feature store initialized")
+    except Exception as exc:
+        logger.warning("Failed to initialize feature store: %s", exc)
+        app.state.feature_store = None
+
     yield
 
     # Cleanup
+    if getattr(app.state, "feature_store", None) is not None:
+        app.state.feature_store.close()
     if app.state.prediction_logger is not None:
         app.state.prediction_logger.close()
 
@@ -174,19 +193,45 @@ def get_prediction_logger(request: Request) -> PredictionLogger | None:
     return getattr(request.app.state, "prediction_logger", None)
 
 
+def get_feature_store(request: Request) -> FeatureStore | None:
+    """FastAPI dependency that retrieves the ``FeatureStore`` from app state.
+
+    Returns:
+        The ``FeatureStore`` instance, or ``None`` if it was not
+        initialized.
+    """
+    return getattr(request.app.state, "feature_store", None)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _prepare_feature_df(request: PredictionRequest) -> pd.DataFrame:
+def _prepare_feature_df(
+    request: PredictionRequest,
+    feature_store: FeatureStore | None = None,
+) -> pd.DataFrame:
     """Convert a prediction request into a feature DataFrame.
+
+    When a ``FeatureStore`` is available, lag and rolling features are
+    enriched from historical data before feature engineering, eliminating
+    train-serve skew.
 
     Args:
         request: Validated prediction request.
+        feature_store: Optional feature store for historical enrichment.
 
     Returns:
         DataFrame ready for model inference.
     """
-    df: pd.DataFrame = pd.DataFrame([request.model_dump()])
+    request_data: dict = request.model_dump()
+
+    if feature_store is not None:
+        try:
+            request_data = feature_store.enrich_request(request_data)
+        except Exception as exc:
+            logger.warning("Feature store enrichment failed: %s", exc)
+
+    df: pd.DataFrame = pd.DataFrame([request_data])
     df = prepare_features(df, mode="serving")
 
     feature_cols: list[str] = get_feature_columns()
@@ -203,6 +248,7 @@ def _predict_single(
     request: PredictionRequest,
     service: ModelService,
     pred_logger: PredictionLogger | None,
+    feature_store: FeatureStore | None = None,
 ) -> PredictionResponse:
     """Run prediction for a single request and log the result.
 
@@ -210,19 +256,26 @@ def _predict_single(
         request: Validated prediction request.
         service: The model service.
         pred_logger: Optional prediction logger.
+        feature_store: Optional feature store for historical enrichment.
 
     Returns:
         The prediction response.
     """
-    features: pd.DataFrame = _prepare_feature_df(request)
+    features: pd.DataFrame = _prepare_feature_df(request, feature_store)
 
     predicted_load: float = service.predict(features)
     PREDICTION_VALUE.observe(predicted_load)
+
+    # Quantile predictions for confidence intervals
+    quantiles = service.predict_quantiles(features)
 
     response = PredictionResponse(
         timestamp_brussels=request.timestamp_brussels,
         predicted_load_mw=predicted_load,
         model_version=service.production_version.version,
+        predicted_load_p10_mw=quantiles.get("p10"),
+        predicted_load_p50_mw=quantiles.get("p50"),
+        predicted_load_p90_mw=quantiles.get("p90"),
     )
 
     # Shadow prediction (logged only, never returned)
@@ -249,6 +302,7 @@ async def predict(
     _key: str = Depends(require_api_key),
     service: ModelService = Depends(get_model_service),
     pred_logger: PredictionLogger | None = Depends(get_prediction_logger),
+    feature_store: FeatureStore | None = Depends(get_feature_store),
 ) -> PredictionResponse:
     """Return a single energy demand prediction."""
     if not service.is_ready:
@@ -258,7 +312,7 @@ async def predict(
         )
     start: float = time.time()
     try:
-        response = _predict_single(request, service, pred_logger)
+        response = _predict_single(request, service, pred_logger, feature_store)
         PREDICTION_COUNT.labels(endpoint="/predict", status="success").inc()
         return response
     except HTTPException:
@@ -277,6 +331,7 @@ async def predict_batch(
     _key: str = Depends(require_api_key),
     service: ModelService = Depends(get_model_service),
     pred_logger: PredictionLogger | None = Depends(get_prediction_logger),
+    feature_store: FeatureStore | None = Depends(get_feature_store),
 ) -> list[PredictionResponse]:
     """Return predictions for a batch of up to 1000 requests."""
     if not service.is_ready:
@@ -287,7 +342,7 @@ async def predict_batch(
     start: float = time.time()
     try:
         responses = [
-            _predict_single(r, service, pred_logger)
+            _predict_single(r, service, pred_logger, feature_store)
             for r in request.predictions
         ]
         PREDICTION_COUNT.labels(endpoint="/predict/batch", status="success").inc()
