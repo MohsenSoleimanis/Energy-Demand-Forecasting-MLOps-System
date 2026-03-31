@@ -25,7 +25,7 @@ import mlflow.lightgbm  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from src.ml.features.feature_engineering import get_feature_columns  # noqa: E402
+from src.ml.features.engineering import get_feature_columns  # noqa: E402
 from src.ml.training.data import (  # noqa: E402
     get_feature_target_split,
     load_training_data,

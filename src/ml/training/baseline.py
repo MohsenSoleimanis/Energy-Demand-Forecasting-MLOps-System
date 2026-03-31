@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-from src.ml.features.feature_engineering import get_feature_columns
+from src.ml.features.engineering import get_feature_columns
 from src.ml.training.data import (
     get_feature_target_split,
     load_training_data,
