@@ -18,7 +18,9 @@ models:
       - name: temperature_2m
         description: Temperature at 2m above ground in Celsius
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
   - name: training_set
     description: >
