@@ -1,83 +1,24 @@
 version: 2
 
+# Source definitions for bronze layer.
+# NOTE: Bronze data lives in S3 Parquet files (not DuckDB tables),
+# so source-level dbt tests cannot run against them.
+# Data quality validation happens via:
+#   1. src/data_platform/quality/validate.py (GE checks on gold data)
+#   2. Staging model logic (range checks, null handling, dedup)
+#   3. Gold model tests (below in _marts.yml)
+
 sources:
   - name: bronze
-    description: Raw data from external APIs
-    loaded_at_field: ingestion_ts
-    freshness:
-      warn_after: {count: 6, period: hour}
-      error_after: {count: 24, period: hour}
-
+    description: Raw data from external APIs (S3 Parquet)
     tables:
       - name: entsoe_load
         description: ENTSO-E actual load (15-min or hourly)
-        columns:
-          - name: timestamp_utc
-            tests:
-              - not_null
-          - name: load_mw
-            tests:
-              - not_null
-              - dbt_utils.accepted_range:
-                  min_value: 0
-                  max_value: 20000
-          - name: area_code
-            tests:
-              - not_null
-              - accepted_values:
-                  values: ["BE"]
-
       - name: entsoe_price
         description: ENTSO-E day-ahead prices
-        columns:
-          - name: timestamp_utc
-            tests:
-              - not_null
-          - name: price_eur_mwh
-            tests:
-              - not_null
-              # Prices can be negative but rarely below -500
-              - dbt_utils.accepted_range:
-                  min_value: -500
-                  max_value: 4000
-
       - name: entsoe_generation
         description: ENTSO-E generation by fuel type
-        columns:
-          - name: timestamp_utc
-            tests:
-              - not_null
-          - name: fuel_type
-            tests:
-              - not_null
-          - name: generation_mw
-            tests:
-              - not_null
-              - dbt_utils.accepted_range:
-                  min_value: 0
-
       - name: weather_actual
         description: Open-Meteo historical weather
-        columns:
-          - name: timestamp_utc
-            tests:
-              - not_null
-          - name: temperature_2m
-            tests:
-              - not_null
-              - dbt_utils.accepted_range:
-                  min_value: -40
-                  max_value: 55
-          - name: relative_humidity_2m
-            tests:
-              - dbt_utils.accepted_range:
-                  min_value: 0
-                  max_value: 100
-
       - name: calendar
         description: Belgian calendar with holidays
-        columns:
-          - name: date
-            tests:
-              - not_null
-              - unique
