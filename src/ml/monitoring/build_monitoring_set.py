@@ -7,13 +7,12 @@ Usage:
     python -m src.ml.monitoring.build_monitoring_set
 """
 import logging
-import os
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 
-from src.shared.config import load_env_file, get_s3_client
+from src.shared.config import get_s3_client, load_env_file
 
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]

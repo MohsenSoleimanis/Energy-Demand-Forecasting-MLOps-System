@@ -221,4 +221,48 @@ def check_and_alert(
     )
 
     send_alert(alert, webhook_url=webhook_url)
+
+    # Trigger automated retraining on critical alerts
+    trigger_retrain_if_critical(alert)
+
     return alert
+
+
+def trigger_retrain_if_critical(alert: Alert) -> bool:
+    """Trigger automated retraining when a CRITICAL alert is raised.
+
+    In production, this would trigger an Airflow DAG or Kubernetes Job.
+    For local development, it logs a warning with instructions.
+
+    Returns True if retrain was triggered.
+    """
+    if alert.level != AlertLevel.CRITICAL:
+        return False
+
+    logger.critical(
+        "CRITICAL alert triggered automated retrain: %s", alert.message,
+    )
+
+    # Try to trigger via Airflow API (if available)
+    import os
+    airflow_url = os.environ.get("AIRFLOW_API_URL")
+    if airflow_url:
+        try:
+            req = Request(
+                f"{airflow_url}/api/v1/dags/dag_retrain/dagRuns",
+                data=json.dumps({"conf": {"trigger": "drift_alert", "reason": alert.message}}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urlopen(req, timeout=10)
+            logger.info("Retrain DAG triggered via Airflow API")
+            return True
+        except Exception as e:
+            logger.warning("Failed to trigger Airflow retrain: %s", e)
+
+    # Fallback: log instructions
+    logger.warning(
+        "Automated retrain requested but no Airflow API configured. "
+        "Run manually: python run.py train"
+    )
+    return False

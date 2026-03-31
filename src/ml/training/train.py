@@ -110,10 +110,67 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
+# Hyperparameter tuning
+# ---------------------------------------------------------------------------
+
+def tune_hyperparameters(
+    X_train, y_train, X_val, y_val,
+    n_trials: int = 20,
+    random_seed: int = 42,
+) -> dict:
+    """Use Optuna to find optimal LightGBM hyperparameters."""
+    try:
+        import optuna
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+    except ImportError:
+        logger.warning("Optuna not installed. Run: pip install optuna")
+        return {}
+
+    def objective(trial):
+        params = {
+            "n_estimators": 1000,
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.15, log=True),
+            "max_depth": trial.suggest_int("max_depth", 4, 12),
+            "num_leaves": trial.suggest_int("num_leaves", 15, 127),
+            "min_child_samples": trial.suggest_int("min_child_samples", 10, 60),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 0.001, 1.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 0.001, 1.0, log=True),
+        }
+
+        model = lgb.LGBMRegressor(**params, random_state=random_seed, verbose=-1)
+        model.fit(
+            X_train, y_train,
+            eval_set=[(X_val, y_val)],
+            callbacks=[lgb.early_stopping(50, verbose=False)],
+        )
+
+        val_pred = model.predict(X_val)
+        mask = y_val.values != 0
+        mape = float(np.mean(np.abs((y_val.values[mask] - val_pred[mask]) / y_val.values[mask])))
+
+        # Log to MLflow as nested run
+        with mlflow.start_run(nested=True, run_name=f"optuna-trial-{trial.number}"):
+            mlflow.log_params(params)
+            mlflow.log_metric("val_mape", mape)
+
+        return mape
+
+    study = optuna.create_study(direction="minimize", study_name="lgbm-hpo")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+    logger.info("Best trial: %d, MAPE: %.4f", study.best_trial.number, study.best_value)
+    logger.info("Best params: %s", study.best_params)
+
+    return study.best_params
+
+
+# ---------------------------------------------------------------------------
 # Main training routine
 # ---------------------------------------------------------------------------
 
-def train() -> str:
+def train(tune: bool = False) -> str:
     """Run full training pipeline. Returns the MLflow run ID."""
     cfg = _load_config()
     model_cfg = cfg["model"]
@@ -174,6 +231,20 @@ def train() -> str:
 
     with mlflow.start_run() as run:
         run_id = run.info.run_id
+
+        # --- Optuna hyperparameter tuning (optional) ---
+        if tune:
+            logger.info("Running Optuna hyperparameter tuning ...")
+            best_params = tune_hyperparameters(
+                X_train, y_train, X_val, y_val,
+                random_seed=random_seed,
+            )
+            if best_params:
+                model_cfg = {**model_cfg, **best_params}
+                logger.info("Merged tuned params into config: %s", best_params)
+            mlflow.set_tag("tuned", "True")
+        else:
+            mlflow.set_tag("tuned", "False")
 
         # Log params
         mlflow.log_params(
@@ -321,8 +392,17 @@ def train() -> str:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train LightGBM energy demand model")
+    parser.add_argument(
+        "--tune", action="store_true",
+        help="Run Optuna hyperparameter tuning before final training",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-    run_id = train()
+    run_id = train(tune=args.tune)
     print(f"Training finished. MLflow run_id: {run_id}")
 
 

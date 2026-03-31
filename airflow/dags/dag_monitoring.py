@@ -56,4 +56,13 @@ with DAG(
         ),
     )
 
-    drift_report >> performance_report >> check_and_alert
+    rollback_check = BashOperator(
+        task_id="rollback_check",
+        bash_command=(
+            "cd /app && python -c \""
+            "from src.ml.serving.rollback import check_and_rollback; "
+            "check_and_rollback()\""
+        ),
+    )
+
+    drift_report >> performance_report >> check_and_alert >> rollback_check

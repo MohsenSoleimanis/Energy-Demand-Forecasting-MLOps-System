@@ -102,6 +102,30 @@ services:
     networks:
       - mlops-network
 
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: mlops-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - mlops-network
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: mlops-promtail
+    restart: unless-stopped
+    volumes:
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail/promtail-config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - mlops-network
+
 volumes:
   pgdata:
   minio-data:

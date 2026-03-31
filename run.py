@@ -146,14 +146,15 @@ def cmd_transform(_args):
     print("\nTransformation complete.")
 
 
-def cmd_train(_args):
+def cmd_train(args):
     """Run the ML training pipeline."""
     ensure_env()
+    tune_flag = " --tune" if getattr(args, "tune", False) else ""
     if shutil.which("dvc"):
         run("dvc repro")
     else:
         run(f"{sys.executable} -m src.ml.training.pull_gold", check=False)
-        run(f"{sys.executable} -m src.ml.training.train")
+        run(f"{sys.executable} -m src.ml.training.train{tune_flag}")
     print("\nTraining complete. Check MLflow at http://localhost:5000")
 
 
@@ -226,7 +227,11 @@ def main():
     )
 
     sub.add_parser("transform", help="Run dbt transformations")
-    sub.add_parser("train", help="Train ML model")
+    train_parser = sub.add_parser("train", help="Train ML model")
+    train_parser.add_argument(
+        "--tune", action="store_true",
+        help="Run Optuna hyperparameter tuning before final training",
+    )
     sub.add_parser("serve", help="Start prediction API")
     sub.add_parser("test", help="Run tests")
     sub.add_parser("monitor", help="Generate monitoring reports")

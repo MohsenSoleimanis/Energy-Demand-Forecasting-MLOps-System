@@ -40,6 +40,7 @@ from src.ml.serving.schemas import (
     PredictionRequest,
     PredictionResponse,
 )
+from src.ml.serving.shadow import load_shadow_model, shadow_predict
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,9 @@ async def lifespan(app: FastAPI):
             "No production model available. /predict will return 503 until "
             "a model is loaded via POST /model/reload."
         )
+
+    # Load shadow/candidate model (non-critical)
+    load_shadow_model(_model_name)
 
     # Initialize prediction logger
     global _prediction_logger
@@ -142,10 +146,16 @@ def _predict_single(request: PredictionRequest) -> PredictionResponse:
         model_version=_model_version.version,
     )
 
+    # Run shadow prediction (logged only, never returned to client)
+    shadow_result = shadow_predict(df.copy(), get_feature_columns())
+
     if _prediction_logger:
+        response_data = response.model_dump()
+        if shadow_result is not None:
+            response_data.update(shadow_result)
         _prediction_logger.log(
             request_data=request.model_dump(),
-            response_data=response.model_dump(),
+            response_data=response_data,
         )
 
     return response
@@ -247,6 +257,7 @@ async def reload_model(_key: str = Depends(require_api_key)):
             detail="Failed to reload model from MLflow registry.",
         )
     _set_model(model, version)
+    load_shadow_model(_model_name)
     logger.info(f"Model reloaded: version {version.version}")
     return HealthResponse(
         status="healthy",
