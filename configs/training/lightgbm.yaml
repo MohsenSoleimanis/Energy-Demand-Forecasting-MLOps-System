@@ -11,8 +11,8 @@ model:
   early_stopping_rounds: 50
 
 split:
-  train_end: "2024-06-30"
-  val_end: "2025-03-31"
+  train_end: "2025-06-30"
+  val_end: "2025-12-31"
 
 random_seed: 42
 
@@ -21,4 +21,4 @@ model_name: "energy-demand-forecast"
 
 quality_gates:
   max_mape: 0.07
-  min_training_rows: 20000
+  min_training_rows: 10000

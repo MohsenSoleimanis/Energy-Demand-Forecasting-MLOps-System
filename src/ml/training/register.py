@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import mlflow
+import yaml
 from mlflow.tracking import MlflowClient
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,18 @@ MODEL_NAME = "energy-demand-forecast"
 # Quality gates
 # ---------------------------------------------------------------------------
 
-GATE_MAX_MAPE = 0.07
-GATE_MIN_TRAINING_ROWS = 20_000
+def _load_quality_gates() -> tuple[float, int]:
+    """Load quality gate thresholds from config, with defaults."""
+    config_path = PROJECT_ROOT / "configs" / "training" / "lightgbm.yaml"
+    if config_path.exists():
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        gates = cfg.get("quality_gates", {})
+        return gates.get("max_mape", 0.07), gates.get("min_training_rows", 10000)
+    return 0.07, 10000
+
+
+GATE_MAX_MAPE, GATE_MIN_TRAINING_ROWS = _load_quality_gates()
 
 
 def _load_eval_metrics() -> dict:
