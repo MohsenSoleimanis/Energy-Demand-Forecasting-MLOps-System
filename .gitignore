@@ -22,8 +22,8 @@ data/
 *.duckdb.wal
 data/**/*.parquet
 
-# DVC
-dvc.lock
+# DVC cache (not the lock file - dvc.lock must be tracked)
+/tmp/dvc
 
 # MLflow
 mlruns/
