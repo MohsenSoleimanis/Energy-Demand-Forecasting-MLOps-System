@@ -14,9 +14,20 @@ from pydantic import BaseModel, Field
 class PredictionRequest(BaseModel):
     """Schema for a single energy demand prediction request.
 
-    All weather fields have physically plausible constraints.  Optional
-    lag/price fields may be ``None`` when the caller does not have
-    historical context (the feature pipeline will fill defaults).
+    All weather fields have physically plausible constraints derived from
+    Belgian climate norms.  Optional lag/price fields may be ``None`` when
+    the caller does not have historical context (the feature pipeline will
+    fill defaults).
+
+    Field constraints:
+        temperature_2m: -40 to 55 degC (covers all recorded European extremes).
+        relative_humidity_2m: 0 to 100 % (physical limits).
+        wind_speed_10m: >= 0 m/s (no upper bound -- gusts can be extreme).
+        wind_direction_10m: 0 to 360 degrees (compass bearing).
+        shortwave_radiation: >= 0 W/m^2.
+        precipitation: >= 0 mm/h.
+        cloud_cover: 0 to 100 %.
+        pressure_msl: 900 to 1100 hPa (plausible sea-level range).
     """
 
     timestamp_brussels: datetime = Field(
@@ -97,8 +108,9 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     """Schema for a single energy demand prediction response.
 
-    Every response carries a unique ``prediction_id`` for traceability
-    and a ``predicted_at`` wall-clock timestamp.
+    Every response carries a unique ``prediction_id`` (UUID4) for
+    traceability and a ``predicted_at`` wall-clock timestamp so
+    downstream consumers can measure serving latency.
     """
 
     timestamp_brussels: datetime = Field(
@@ -115,7 +127,7 @@ class PredictionResponse(BaseModel):
     )
     prediction_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        description="Unique identifier for this prediction.",
+        description="Unique identifier for this prediction (UUID4).",
     )
     predicted_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -157,6 +169,18 @@ class HealthResponse(BaseModel):
         description="MLflow alias of the loaded model (e.g. 'production').",
     )
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "status": "healthy",
+                    "model_version": "5",
+                    "model_alias": "production",
+                }
+            ]
+        }
+    }
+
 
 class ModelInfoResponse(BaseModel):
     """Schema for the model info endpoint response.
@@ -180,6 +204,19 @@ class ModelInfoResponse(BaseModel):
         ...,
         description="Tags attached to the MLflow run.",
     )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "model_name": "energy-demand-forecast",
+                    "model_version": "5",
+                    "metrics": {"test_mape": 0.042, "test_rmse": 312.5},
+                    "tags": {"mlflow.runName": "lgbm-v5"},
+                }
+            ]
+        }
+    }
 
 
 class BatchPredictionRequest(BaseModel):

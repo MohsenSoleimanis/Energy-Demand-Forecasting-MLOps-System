@@ -1,3 +1,6 @@
+# Monitoring thresholds — Single Source of Truth
+# All MAPE, PSI, latency thresholds, and rollback settings.
+
 drift:
   psi_warning_threshold: 0.2
   psi_critical_threshold: 0.5

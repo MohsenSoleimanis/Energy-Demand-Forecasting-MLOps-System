@@ -1,8 +1,11 @@
 """API key authentication for the Energy Demand Forecasting API.
 
-Reads the header name from serving config.  Uses timing-safe comparison
-on every candidate key to prevent timing side-channels.
+Reads the header name from ``configs/serving/api.yaml``.  Uses
+timing-safe comparison on every candidate key to prevent timing
+side-channels.
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -16,11 +19,14 @@ from src.shared.config import load_config
 
 logger = logging.getLogger(__name__)
 
-_CONFIGS_DIR = Path(__file__).resolve().parents[3] / "configs"
+_CONFIGS_DIR: Path = Path(__file__).resolve().parents[3] / "configs"
 
 
 def _load_header_name() -> str:
     """Read the API key header name from serving config.
+
+    Falls back to ``"X-API-Key"`` if the config file is missing or
+    the key is absent.
 
     Returns:
         Header name string (e.g. ``"X-API-Key"``).
@@ -32,7 +38,9 @@ def _load_header_name() -> str:
         return "X-API-Key"
 
 
-API_KEY_HEADER = APIKeyHeader(name=_load_header_name(), auto_error=False)
+API_KEY_HEADER: APIKeyHeader = APIKeyHeader(
+    name=_load_header_name(), auto_error=False
+)
 
 
 def _get_valid_api_keys() -> set[str]:
@@ -52,9 +60,9 @@ async def require_api_key(
 ) -> str:
     """FastAPI dependency that validates the API key header.
 
-    Uses :func:`secrets.compare_digest` on every configured key so that
-    the total comparison time is constant regardless of which (or whether)
-    a key matches.
+    Uses :func:`secrets.compare_digest` on **every** configured key so
+    that the total comparison time is constant regardless of which (or
+    whether) a key matches -- preventing timing side-channel attacks.
 
     Args:
         api_key: Value extracted from the request header by FastAPI.
@@ -75,11 +83,11 @@ async def require_api_key(
         raise HTTPException(status_code=500, detail="Server misconfiguration")
 
     # Evaluate ALL keys so elapsed time does not reveal which key matched.
-    matched = False
+    matched: bool = False
     for candidate in valid_keys:
         if secrets.compare_digest(api_key, candidate):
             matched = True
-            # Do NOT break — keep comparing remaining keys for constant time.
+            # Do NOT break -- keep comparing remaining keys for constant time.
 
     if not matched:
         raise HTTPException(status_code=403, detail="Invalid API key")

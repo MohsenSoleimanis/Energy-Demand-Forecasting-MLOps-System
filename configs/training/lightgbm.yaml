@@ -1,3 +1,6 @@
+# LightGBM training configuration — Single Source of Truth
+# All hyperparameters, split ratios, quality gates, and model identity.
+
 model:
   n_estimators: 1000
   learning_rate: 0.05
@@ -11,8 +14,11 @@ model:
   early_stopping_rounds: 50
 
 split:
-  train_ratio: 0.70
-  val_ratio: 0.15
+  # Dynamic split ratios - computed from available data
+  # No hardcoded dates - works regardless of data time range
+  train_ratio: 0.70  # 70% oldest data for training
+  val_ratio: 0.15    # 15% for validation (early stopping)
+  # remaining 15% for test (final evaluation)
 
 random_seed: 42
 
