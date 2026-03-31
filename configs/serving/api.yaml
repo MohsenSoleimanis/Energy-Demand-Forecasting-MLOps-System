@@ -1,6 +1,29 @@
+# Serving / API configuration — Single Source of Truth
+# Model identity, batch limits, host settings.
+
 model_name: "energy-demand-forecast"
 model_alias: "production"
-mlflow_tracking_uri: ${oc.env:MLFLOW_TRACKING_URI,http://localhost:5000}
-batch_size_limit: 1000
+
+batch_size_limit: 1000         # max rows per batch prediction request
+
 host: "0.0.0.0"
 port: 8000
+
+auth:
+  enabled: false
+  header_name: "X-API-Key"
+  # When enabled, set API_KEYS env var — never store secrets in config files
+
+prediction_logger:
+  bucket: "lakehouse"
+  prefix: "predictions"
+  flush_size: 50
+  flush_interval_s: 60
+  max_retry_count: 3
+
+metrics:
+  latency_buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1.0]
+  prediction_value_buckets: [4000, 6000, 8000, 10000, 12000, 14000, 16000]
+
+cors:
+  allowed_origins: "http://localhost:3000,http://localhost:8000"

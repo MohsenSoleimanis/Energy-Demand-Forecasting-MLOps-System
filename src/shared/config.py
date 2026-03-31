@@ -1,49 +1,124 @@
-"""Centralized configuration. All credentials come from environment variables."""
-import logging
-import os
+"""Centralized configuration loader.
 
-logger = logging.getLogger(__name__)
+All runtime values come from YAML config files or environment variables.
+No hardcoded credentials, paths, or magic numbers.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from src.shared.exceptions import ConfigError
+
+
+def load_config(path: Path | str) -> dict[str, Any]:
+    """Read a YAML configuration file and return its contents as a dict.
+
+    Args:
+        path: Filesystem path to the YAML file.
+
+    Returns:
+        Parsed YAML contents.
+
+    Raises:
+        ConfigError: If the file does not exist or cannot be parsed.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise ConfigError(f"Configuration file not found: {path}")
+    try:
+        with path.open() as fh:
+            data = yaml.safe_load(fh)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"Failed to parse YAML file {path}: {exc}") from exc
+    if data is None:
+        raise ConfigError(f"Configuration file is empty: {path}")
+    return data
+
 
 def require_env(name: str) -> str:
-    """Get a required environment variable or raise with clear message."""
-    val = os.environ.get(name)
-    if not val:
-        raise OSError(
+    """Get a required environment variable or raise.
+
+    Args:
+        name: Environment variable name.
+
+    Returns:
+        The variable's value.
+
+    Raises:
+        ConfigError: If the variable is unset or empty.
+    """
+    value = os.environ.get(name)
+    if not value:
+        raise ConfigError(
             f"Required environment variable '{name}' is not set. "
             f"Copy .env.example to .env and fill in all values."
         )
-    return val
+    return value
 
-def get_s3_config() -> dict:
-    """Return S3/MinIO configuration from environment variables."""
-    return {
-        "endpoint_url": os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000"),
-        "aws_access_key_id": require_env("AWS_ACCESS_KEY_ID"),
-        "aws_secret_access_key": require_env("AWS_SECRET_ACCESS_KEY"),
-    }
 
-def get_s3_client():
-    """Create a boto3 S3 client using environment credentials."""
-    import boto3
-    return boto3.client("s3", **get_s3_config())
+def get_env(name: str, default: str) -> str:
+    """Get an environment variable with an explicit default.
 
-def load_env_file(env_path: str | None = None):
-    """Load .env file into os.environ. Does NOT override existing vars."""
-    from pathlib import Path
-    if env_path is None:
-        # Search up from cwd for .env
-        path = Path.cwd()
-        while path != path.parent:
-            candidate = path / ".env"
-            if candidate.exists():
-                env_path = str(candidate)
-                break
-            path = path.parent
-    if env_path is None:
+    Args:
+        name: Environment variable name.
+        default: Value returned when the variable is unset.
+
+    Returns:
+        The variable's value or *default*.
+    """
+    return os.environ.get(name, default)
+
+
+def load_env_file(path: Path | str | None = None) -> None:
+    """Load a .env file into ``os.environ``.
+
+    Existing variables are **not** overwritten.  When *path* is ``None`` the
+    function walks up from the current working directory until it finds a
+    ``.env`` file.
+
+    Args:
+        path: Explicit path to the ``.env`` file, or ``None`` to auto-detect.
+    """
+    if path is not None:
+        env_path = Path(path)
+    else:
+        env_path = _find_env_file()
+
+    if env_path is None or not env_path.exists():
         return
-    with open(env_path) as f:
-        for line in f:
+
+    _parse_env_file(env_path)
+
+
+# ------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------
+
+
+def _find_env_file() -> Path | None:
+    """Walk up from cwd looking for a .env file."""
+    current = Path.cwd()
+    while True:
+        candidate = current / ".env"
+        if candidate.exists():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def _parse_env_file(env_path: Path) -> None:
+    """Parse KEY=VALUE lines from *env_path* into ``os.environ``."""
+    with env_path.open() as fh:
+        for line in fh:
             line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, val = line.partition("=")
-                os.environ.setdefault(key.strip(), val.strip())
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip())

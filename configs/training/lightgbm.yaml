@@ -11,11 +11,8 @@ model:
   early_stopping_rounds: 50
 
 split:
-  # Dynamic split ratios - computed from available data
-  # No hardcoded dates - works regardless of data time range
-  train_ratio: 0.70  # 70% oldest data for training
-  val_ratio: 0.15    # 15% for validation (early stopping)
-  # remaining 15% for test (final evaluation)
+  train_ratio: 0.70
+  val_ratio: 0.15
 
 random_seed: 42
 
@@ -25,3 +22,6 @@ model_name: "energy-demand-forecast"
 quality_gates:
   max_mape: 0.07
   min_training_rows: 8000
+
+tuning:
+  n_trials: 20
