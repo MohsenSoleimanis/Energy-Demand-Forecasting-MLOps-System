@@ -13,14 +13,12 @@ stages:
       - src/ml/training/train.py
       - src/ml/features/engineering.py
       - configs/training/lightgbm.yaml
+      - configs/data/features.yaml
     outs:
       - metrics/run_id.txt:
           cache: false
     metrics:
       - metrics/train_metrics.json:
-          cache: false
-    plots:
-      - plots/feature_importance.png:
           cache: false
 
   evaluate:
@@ -41,9 +39,13 @@ stages:
           cache: false
       - plots/residuals_over_time.png:
           cache: false
+      - plots/feature_importance.png:
+          cache: false
 
   register:
     cmd: python -m src.ml.training.register
     deps:
       - metrics/eval_metrics.json
+      - metrics/train_metrics.json
       - src/ml/training/register.py
+      - configs/training/lightgbm.yaml
