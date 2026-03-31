@@ -1,0 +1,71 @@
+# CICD-002 + CICD-003 + CICD-005: Training Pipeline Workflow
+name: Train
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/ml/**"
+      - "configs/training/**"
+  schedule:
+    - cron: "0 6 * * 1"  # Every Monday at 06:00 UTC
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Setup DVC
+        uses: iterative/setup-dvc@v1
+
+      - name: Setup CML
+        uses: iterative/setup-cml@v2
+
+      - name: Pull DVC data
+        run: dvc pull
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Reproduce DVC pipeline
+        run: dvc repro
+
+      - name: Compare metrics
+        id: metrics
+        run: |
+          echo "## Training Metrics" > metrics_report.md
+          echo "" >> metrics_report.md
+          dvc metrics diff --md >> metrics_report.md || echo "No previous metrics to compare." >> metrics_report.md
+          echo "" >> metrics_report.md
+          echo "### Current Metrics" >> metrics_report.md
+          dvc metrics show --md >> metrics_report.md
+
+      - name: Post CML comment on PR
+        if: github.event_name == 'pull_request'
+        run: |
+          cml comment create metrics_report.md
+        env:
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push DVC tracked outputs
+        run: dvc push
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

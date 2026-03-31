@@ -1,0 +1,24 @@
+energy_demand:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: energy_demand.duckdb
+      extensions:
+        - httpfs
+      settings:
+        s3_region: us-east-1
+        s3_endpoint: "{{ env_var('S3_ENDPOINT', 'localhost:9000') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+        s3_use_ssl: false
+        s3_url_style: path
+    postgres_serving:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: energy_warehouse
+      schema: public
+      threads: 4

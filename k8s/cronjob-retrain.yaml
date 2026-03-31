@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-retrain
+  namespace: energy-forecast
+spec:
+  schedule: "0 3 * * 0"  # Sunday 03:00 UTC
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: retrain
+              image: ghcr.io/mohsensoleimanis/energy-demand-forecasting-mlops-system/training:latest
+              envFrom:
+                - secretRef:
+                    name: forecast-secrets
+              command: ["python", "-m", "src.ml.training.train"]
+          restartPolicy: OnFailure
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-monitoring
+  namespace: energy-forecast
+spec:
+  schedule: "0 8 * * *"  # Daily 08:00 UTC
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: monitor
+              image: ghcr.io/mohsensoleimanis/energy-demand-forecasting-mlops-system/training:latest
+              envFrom:
+                - secretRef:
+                    name: forecast-secrets
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  python -m src.ml.monitoring.build_monitoring_set
+                  python -m src.ml.monitoring.drift_report
+                  python -m src.ml.monitoring.performance_report
+                  python -m src.ml.serving.rollback
+          restartPolicy: OnFailure

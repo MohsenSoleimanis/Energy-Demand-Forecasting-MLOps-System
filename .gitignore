@@ -1,0 +1,43 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data (not configs/data/ which has YAML configs)
+/data/
+*.duckdb
+*.duckdb.wal
+/data/**/*.parquet
+
+# DVC cache (not the lock file - dvc.lock must be tracked)
+/tmp/dvc
+
+# MLflow
+mlruns/
+
+# Great Expectations
+.great_expectations/uncommitted/
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store
+src/data_platform/dbt_project/logs/
+src/data_platform/dbt_project/.user.yml
+src/data_platform/dbt_project/target/
+*.duckdb
+*.duckdb.wal

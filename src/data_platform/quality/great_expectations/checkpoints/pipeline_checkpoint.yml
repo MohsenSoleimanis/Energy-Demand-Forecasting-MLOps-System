@@ -1,0 +1,32 @@
+# VALID-004: Pipeline Checkpoint - runs all validation suites in sequence
+name: pipeline_checkpoint
+config_version: 1.0
+class_name: Checkpoint
+run_name_template: "pipeline_run_%Y%m%d_%H%M%S"
+
+validations:
+  - batch_request:
+      datasource_name: energy_duckdb
+      data_connector_name: default_inferred_data_connector
+      data_asset_name: bronze_load
+    expectation_suite_name: bronze_load_suite
+
+  - batch_request:
+      datasource_name: energy_duckdb
+      data_connector_name: default_inferred_data_connector
+      data_asset_name: bronze_weather
+    expectation_suite_name: bronze_weather_suite
+
+  - batch_request:
+      datasource_name: energy_duckdb
+      data_connector_name: default_inferred_data_connector
+      data_asset_name: gold_training
+    expectation_suite_name: gold_training_suite
+
+action_list:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction

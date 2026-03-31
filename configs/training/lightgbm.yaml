@@ -1,0 +1,33 @@
+# LightGBM training configuration — Single Source of Truth
+# All hyperparameters, split ratios, quality gates, and model identity.
+
+model:
+  n_estimators: 1000
+  learning_rate: 0.05
+  max_depth: 8
+  num_leaves: 63
+  min_child_samples: 20
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_alpha: 0.1
+  reg_lambda: 0.1
+  early_stopping_rounds: 50
+
+split:
+  # Dynamic split ratios - computed from available data
+  # No hardcoded dates - works regardless of data time range
+  train_ratio: 0.70  # 70% oldest data for training
+  val_ratio: 0.15    # 15% for validation (early stopping)
+  # remaining 15% for test (final evaluation)
+
+random_seed: 42
+
+experiment_name: "energy-demand-forecast"
+model_name: "energy-demand-forecast"
+
+quality_gates:
+  max_mape: 0.07
+  min_training_rows: 8000
+
+tuning:
+  n_trials: 20

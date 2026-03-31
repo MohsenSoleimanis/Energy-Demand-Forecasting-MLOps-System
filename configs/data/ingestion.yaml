@@ -1,0 +1,67 @@
+# Data ingestion configuration — Single Source of Truth
+# All coordinates, bucket names, API endpoints, and retry settings.
+
+entsoe:
+  # ENTSO-E Transparency Platform
+  # API key must be set via ENTSOE_API_KEY env var
+  area_code: "BE"              # Belgium bidding zone
+  base_url: "https://web-api.tp.entsoe.eu/api"
+  start_date: "2022-01-01"
+  end_date: "2025-12-31"
+
+weather:
+  # Open-Meteo API — Brussels coordinates
+  archive_url: "https://archive-api.open-meteo.com/v1/archive"
+  forecast_url: "https://api.open-meteo.com/v1/forecast"
+  latitude: 50.8503
+  longitude: 4.3517
+  start_date: "2022-01-01"
+  end_date: "2025-12-31"
+  timezone: "UTC"
+  forecast_days: 3
+  request_timeout_seconds: 120
+  variables:
+    - temperature_2m
+    - relative_humidity_2m
+    - apparent_temperature     # mapped to feels_like_temp in staging
+    - wind_speed_10m
+    - wind_direction_10m
+    - shortwave_radiation
+    - precipitation
+    - cloud_cover
+    - pressure_msl
+
+calendar:
+  start_year: 2020
+  end_year: 2027
+  # Approximate Flemish school vacation definitions.
+  # Each entry: name, month/day start, month/day end (or "easter" offset).
+  school_vacations:
+    christmas_start:
+      month: 12
+      day: 25
+    christmas_end:
+      month: 1
+      day: 5
+    carnival_anchor: "last_weekday_feb"   # last Friday of February, week around it
+    easter_offset_start_days: -6          # days before Easter Sunday
+    easter_duration_days: 14              # two full weeks
+    summer_start:
+      month: 7
+      day: 1
+    summer_end:
+      month: 8
+      day: 31
+    autumn_anchor:
+      month: 11
+      day: 1                              # week containing Nov 1
+
+storage:
+  bucket: "lakehouse"
+  bronze_prefix: "bronze"
+  silver_prefix: "silver"
+  gold_prefix: "gold"
+
+retry:
+  max_attempts: 3
+  backoff_seconds: 5

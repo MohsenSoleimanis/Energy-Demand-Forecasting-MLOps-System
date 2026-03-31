@@ -1,0 +1,24 @@
+version: 2
+
+# Source definitions for bronze layer.
+# NOTE: Bronze data lives in S3 Parquet files (not DuckDB tables),
+# so source-level dbt tests cannot run against them.
+# Data quality validation happens via:
+#   1. src/data_platform/quality/validate.py (GE checks on gold data)
+#   2. Staging model logic (range checks, null handling, dedup)
+#   3. Gold model tests (below in _marts.yml)
+
+sources:
+  - name: bronze
+    description: Raw data from external APIs (S3 Parquet)
+    tables:
+      - name: entsoe_load
+        description: ENTSO-E actual load (15-min or hourly)
+      - name: entsoe_price
+        description: ENTSO-E day-ahead prices
+      - name: entsoe_generation
+        description: ENTSO-E generation by fuel type
+      - name: weather_actual
+        description: Open-Meteo historical weather
+      - name: calendar
+        description: Belgian calendar with holidays

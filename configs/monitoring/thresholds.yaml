@@ -1,0 +1,25 @@
+# Monitoring thresholds — Single Source of Truth
+# All MAPE, PSI, latency thresholds, and rollback settings.
+
+drift:
+  psi_warning_threshold: 0.2
+  psi_critical_threshold: 0.5
+  reference_window_days: 30
+  current_window_days: 7
+
+performance:
+  mape_warning_threshold: 0.07
+  mape_critical_threshold: 0.10
+  evaluation_window_days: 7
+
+latency:
+  p95_warning_ms: 500
+  p95_critical_ms: 1000
+
+rollback:
+  degradation_threshold: 1.5
+  min_predictions: 24
+
+alerting:
+  webhook_url: null
+  enable_email: false

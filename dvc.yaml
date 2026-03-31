@@ -1,0 +1,60 @@
+stages:
+  pull_gold:
+    cmd: python -m src.ml.training.pull_gold
+    deps:
+      - src/ml/training/pull_gold.py
+    outs:
+      - data/gold/training_set.parquet
+
+  validate_gold:
+    cmd: python -m src.data_platform.quality.validate
+    deps:
+      - data/gold/training_set.parquet
+      - src/data_platform/quality/great_expectations/expectations/gold_training_suite.json
+    outs:
+      - data/quality/validation_result.json:
+          cache: false
+
+  train:
+    cmd: python -m src.ml.training.train
+    deps:
+      - data/gold/training_set.parquet
+      - src/ml/training/train.py
+      - src/ml/features/engineering.py
+      - configs/training/lightgbm.yaml
+      - configs/data/features.yaml
+    outs:
+      - metrics/run_id.txt:
+          cache: false
+    metrics:
+      - metrics/train_metrics.json:
+          cache: false
+
+  evaluate:
+    cmd: python -m src.ml.training.evaluate
+    deps:
+      - src/ml/training/evaluate.py
+      - metrics/run_id.txt
+      - data/gold/training_set.parquet
+    metrics:
+      - metrics/eval_metrics.json:
+          cache: false
+    plots:
+      - plots/actual_vs_predicted.png:
+          cache: false
+      - plots/error_by_hour.png:
+          cache: false
+      - plots/error_by_month.png:
+          cache: false
+      - plots/residuals_over_time.png:
+          cache: false
+      - plots/feature_importance.png:
+          cache: false
+
+  register:
+    cmd: python -m src.ml.training.register
+    deps:
+      - metrics/eval_metrics.json
+      - metrics/train_metrics.json
+      - src/ml/training/register.py
+      - configs/training/lightgbm.yaml
