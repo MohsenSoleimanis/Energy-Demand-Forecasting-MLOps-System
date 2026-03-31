@@ -72,7 +72,7 @@ class FeatureStore:
         query = """
             SELECT timestamp_brussels, load_mw, price_eur_mwh, temperature_2m
             FROM main_gold.feature_base
-            WHERE timestamp_brussels < ?
+            WHERE timestamp_brussels < CAST(? AS TIMESTAMP)
             ORDER BY timestamp_brussels DESC
             LIMIT ?
         """
@@ -98,7 +98,7 @@ class FeatureStore:
         ]:
             query = f"""
                 SELECT {col} FROM main_gold.feature_base
-                WHERE timestamp_brussels = ? - INTERVAL '{lag_hours} hours'
+                WHERE timestamp_brussels = CAST(? AS TIMESTAMP) - INTERVAL '{lag_hours} hours'
                 LIMIT 1
             """
             result = self._con.execute(query, [target_timestamp]).fetchone()
@@ -116,8 +116,8 @@ class FeatureStore:
         query = """
             SELECT AVG(load_mw) as mean_24, STDDEV(load_mw) as std_24
             FROM main_gold.feature_base
-            WHERE timestamp_brussels BETWEEN ? - INTERVAL '24 hours'
-                                          AND ? - INTERVAL '1 hour'
+            WHERE timestamp_brussels BETWEEN CAST(? AS TIMESTAMP) - INTERVAL '24 hours'
+                                          AND CAST(? AS TIMESTAMP) - INTERVAL '1 hour'
         """
         result = self._con.execute(
             query, [target_timestamp, target_timestamp]
@@ -133,8 +133,8 @@ class FeatureStore:
         query = """
             SELECT AVG(load_mw) as mean_168
             FROM main_gold.feature_base
-            WHERE timestamp_brussels BETWEEN ? - INTERVAL '168 hours'
-                                          AND ? - INTERVAL '1 hour'
+            WHERE timestamp_brussels BETWEEN CAST(? AS TIMESTAMP) - INTERVAL '168 hours'
+                                          AND CAST(? AS TIMESTAMP) - INTERVAL '1 hour'
         """
         result = self._con.execute(
             query, [target_timestamp, target_timestamp]
@@ -147,8 +147,8 @@ class FeatureStore:
         query = """
             SELECT AVG(temperature_2m) as temp_mean_24
             FROM main_gold.feature_base
-            WHERE timestamp_brussels BETWEEN ? - INTERVAL '24 hours'
-                                          AND ? - INTERVAL '1 hour'
+            WHERE timestamp_brussels BETWEEN CAST(? AS TIMESTAMP) - INTERVAL '24 hours'
+                                          AND CAST(? AS TIMESTAMP) - INTERVAL '1 hour'
         """
         result = self._con.execute(
             query, [target_timestamp, target_timestamp]
