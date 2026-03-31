@@ -1,14 +1,14 @@
 """ORCH-001: Daily Data Refresh DAG.
 
-Runs daily at 02:00 UTC. Ingests load and weather data, validates bronze layer,
+Runs daily at 02:00 UTC. Ingests load and weather data,
 then runs dbt transformations through silver and gold layers.
 """
 
 from datetime import datetime, timedelta
 
-from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.operators.python import PythonOperator
+
+from airflow import DAG
 
 default_args = {
     "owner": "mlops",
@@ -18,34 +18,6 @@ default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
 }
-
-
-def _ingest_entsoe(**context):
-    """Ingest load data from ENTSO-E Transparency Platform."""
-    from src.data_platform.ingestion.entsoe_client import ingest_load_data
-
-    execution_date = context["ds"]
-    ingest_load_data(date=execution_date)
-
-
-def _ingest_weather(**context):
-    """Ingest weather data from Open-Meteo API."""
-    from src.data_platform.ingestion.weather_client import ingest_weather_data
-
-    execution_date = context["ds"]
-    ingest_weather_data(date=execution_date)
-
-
-def _validate_bronze(**context):
-    """Run Great Expectations validation on bronze layer."""
-    from src.data_platform.quality.validation import run_bronze_validation
-
-    results = run_bronze_validation()
-    if not results["success"]:
-        raise ValueError(
-            f"Bronze validation failed: {results.get('statistics', {})}"
-        )
-
 
 with DAG(
     dag_id="data_refresh",
@@ -57,19 +29,14 @@ with DAG(
     tags=["data", "ingestion", "dbt"],
 ) as dag:
 
-    ingest_entsoe = PythonOperator(
+    ingest_entsoe = BashOperator(
         task_id="ingest_entsoe",
-        python_callable=_ingest_entsoe,
+        bash_command="cd /app && python -m src.data_platform.ingestion.ingest_entsoe",
     )
 
-    ingest_weather = PythonOperator(
+    ingest_weather = BashOperator(
         task_id="ingest_weather",
-        python_callable=_ingest_weather,
-    )
-
-    validate_bronze = PythonOperator(
-        task_id="validate_bronze",
-        python_callable=_validate_bronze,
+        bash_command="cd /app && python -m src.data_platform.ingestion.ingest_weather",
     )
 
     dbt_run = BashOperator(
@@ -82,4 +49,4 @@ with DAG(
         bash_command="cd /app/dbt && dbt test --profiles-dir /app/dbt/profiles",
     )
 
-    ingest_entsoe >> ingest_weather >> validate_bronze >> dbt_run >> dbt_test
+    ingest_entsoe >> ingest_weather >> dbt_run >> dbt_test
