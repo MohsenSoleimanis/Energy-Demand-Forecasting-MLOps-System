@@ -268,6 +268,9 @@ def main():
     sub.add_parser("serve", help="Start prediction API")
     sub.add_parser("test", help="Run tests")
     sub.add_parser("monitor", help="Generate monitoring reports")
+    sub.add_parser("export", help="Export gold tables to PostgreSQL and Delta Lake")
+    sub.add_parser("validate", help="Run data quality validation on gold data")
+    sub.add_parser("stream", help="Start Kafka streaming producer")
     sub.add_parser("setup", help="Full setup: up -> ingest -> transform -> train")
 
     args = parser.parse_args()
@@ -286,6 +289,9 @@ def main():
         "serve": cmd_serve,
         "test": cmd_test,
         "monitor": cmd_monitor,
+        "export": cmd_export,
+        "validate": cmd_validate,
+        "stream": cmd_stream,
         "setup": cmd_setup,
     }
 
