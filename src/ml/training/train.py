@@ -165,7 +165,7 @@ def tune_hyperparameters(
         raise ImportError(
             "Optuna is required for hyperparameter tuning but is not installed. "
             "Install it with: pip install optuna"
-        )
+        ) from None
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     random_seed = config["random_seed"]

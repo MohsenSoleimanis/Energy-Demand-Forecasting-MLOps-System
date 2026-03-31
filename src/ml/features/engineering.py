@@ -20,7 +20,7 @@ from src.shared.config import load_config
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "data" / "features.yaml"
+_CONFIG_PATH = Path(__file__).resolve().parents[3] / "configs" / "data" / "features.yaml"
 
 
 def _load_features_config() -> dict[str, Any]:

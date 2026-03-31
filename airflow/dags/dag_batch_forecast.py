@@ -47,8 +47,10 @@ with DAG(
         task_id="predict",
         bash_command=(
             "cd /app && python -c \""
-            "from src.ml.serving.model_loader import load_production_model; "
-            "load_production_model()\""
+            "import mlflow; "
+            "from src.ml.serving.model_service import ModelService; "
+            "s = ModelService('energy-demand-forecast', mlflow.MlflowClient()); "
+            "s.load_production()\""
         ),
     )
 

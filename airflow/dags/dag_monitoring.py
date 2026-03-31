@@ -33,7 +33,7 @@ with DAG(
         task_id="drift_report",
         bash_command=(
             "cd /app && python -c \""
-            "from src.ml.monitoring.drift_report import generate_drift_report; "
+            "from src.ml.monitoring.drift import generate_drift_report; "
             "generate_drift_report()\""
         ),
     )
@@ -42,7 +42,7 @@ with DAG(
         task_id="performance_report",
         bash_command=(
             "cd /app && python -c \""
-            "from src.ml.monitoring.performance_report import generate_performance_report; "
+            "from src.ml.monitoring.performance import generate_performance_report; "
             "generate_performance_report()\""
         ),
     )

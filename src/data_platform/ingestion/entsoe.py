@@ -9,16 +9,16 @@ All configuration is loaded from ``configs/data/ingestion.yaml``.
 from __future__ import annotations
 
 import logging
-import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 from entsoe import EntsoePandasClient
 
 from src.shared.config import load_config, require_env
-from src.shared.exceptions import ConfigError, DataPipelineError
+from src.shared.exceptions import ConfigError
 from src.shared.s3 import upload_parquet
 
 logger = logging.getLogger(__name__)

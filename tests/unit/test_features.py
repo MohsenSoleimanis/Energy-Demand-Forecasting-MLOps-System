@@ -17,9 +17,9 @@ class TestLagFeatures:
     def test_lag_features_use_only_past(self, sample_feature_base_df):
         df = compute_lag_features(sample_feature_base_df.copy())
         # First row should have NaN for all lags
-        assert pd.isna(df["load_lag_1h"].iloc[0])
-        # The lag_1h at index 1 should equal load_mw at index 0
-        assert df["load_lag_1h"].iloc[1] == sample_feature_base_df["load_mw"].iloc[0]
+        assert pd.isna(df["load_lag_24h"].iloc[0])
+        # The lag_24h at index 24 should equal load_mw at index 0
+        assert df["load_lag_24h"].iloc[24] == sample_feature_base_df["load_mw"].iloc[0]
 
     def test_lag_24h_correct(self, sample_feature_base_df):
         df = compute_lag_features(sample_feature_base_df.copy())

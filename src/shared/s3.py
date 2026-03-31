@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
 
 
-def create_s3_client() -> "S3Client":
+def create_s3_client() -> S3Client:
     """Create a boto3 S3 client from environment variables.
 
     Required env vars: ``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``.
@@ -46,7 +46,7 @@ def upload_parquet(
     df: pd.DataFrame,
     bucket: str,
     key: str,
-    client: "S3Client | None" = None,
+    client: S3Client | None = None,
 ) -> None:
     """Serialize *df* as Parquet and upload to S3.
 
@@ -74,7 +74,7 @@ def upload_parquet(
 def list_parquet_files(
     bucket: str,
     prefix: str,
-    client: "S3Client | None" = None,
+    client: S3Client | None = None,
 ) -> list[str]:
     """List all ``.parquet`` object keys under *prefix*.
 
@@ -107,7 +107,7 @@ def list_parquet_files(
 def read_parquet_files(
     bucket: str,
     prefix: str,
-    client: "S3Client | None" = None,
+    client: S3Client | None = None,
 ) -> pd.DataFrame:
     """Read and concatenate all Parquet files under *prefix*.
 

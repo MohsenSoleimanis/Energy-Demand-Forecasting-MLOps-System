@@ -86,6 +86,9 @@ ignore = [
     "B017",   # pytest.raises(Exception) is acceptable in schema validation tests
     "UP042",  # StrEnum - we use plain Enum for broader compatibility
     "E402",   # module-level import not at top - needed for pytest.importorskip guards
+    "TCH",    # type-checking block suggestions - not critical
+    "B008",   # Depends() in FastAPI signatures is the standard pattern
+    "SIM108", # ternary operator suggestion - explicit if/else more readable in some cases
 ]
 
 [tool.ruff.lint.isort]

@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -263,7 +264,7 @@ def _plot_shap_summary(
             raise ImportError(
                 "SHAP was explicitly requested but is not installed. "
                 "Install it with: pip install shap"
-            )
+            ) from None
         logger.info("SHAP not installed, skipping explainability plot")
         return None
 

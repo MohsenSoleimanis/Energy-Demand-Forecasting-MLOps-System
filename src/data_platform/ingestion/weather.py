@@ -9,7 +9,7 @@ All configuration is loaded from ``configs/data/ingestion.yaml``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +68,7 @@ def fetch_weather_year(
     start_date = f"{year}-01-01"
     end_date = f"{year}-12-31"
     yesterday = (
-        datetime.now(timezone.utc) - timedelta(days=1)
+        datetime.now(UTC) - timedelta(days=1)
     ).strftime("%Y-%m-%d")
 
     if start_date > yesterday:
