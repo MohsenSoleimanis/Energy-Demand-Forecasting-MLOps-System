@@ -57,7 +57,7 @@ def sample_feature_base_df():
 @pytest.fixture
 def sample_training_df(sample_feature_base_df):
     """Create a sample training DataFrame with features and target."""
-    from src.ml.features.feature_engineering import prepare_features
+    from src.ml.features.engineering import prepare_features
 
     df = prepare_features(sample_feature_base_df.copy(), mode="training")
     df["target_load_24h"] = df["load_mw"].shift(-24)

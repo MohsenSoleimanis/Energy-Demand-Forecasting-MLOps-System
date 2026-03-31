@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from src.ml.features.feature_engineering import (
+from src.ml.features.engineering import (
     compute_cyclical_features,
     compute_interaction_features,
     compute_lag_features,

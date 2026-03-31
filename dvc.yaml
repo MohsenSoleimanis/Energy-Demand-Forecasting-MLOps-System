@@ -11,7 +11,7 @@ stages:
     deps:
       - data/gold/training_set.parquet
       - src/ml/training/train.py
-      - src/ml/features/feature_engineering.py
+      - src/ml/features/engineering.py
       - configs/training/lightgbm.yaml
     outs:
       - metrics/run_id.txt:

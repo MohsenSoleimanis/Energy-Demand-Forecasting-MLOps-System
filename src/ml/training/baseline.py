@@ -1,14 +1,14 @@
-"""
-Baseline models for Belgian energy demand forecasting.
+"""Baseline models for Belgian energy demand forecasting.
 
-Two baselines:
-    1. Persistence: predict = load_lag_24h (yesterday same hour)
-    2. Linear Regression: sklearn LinearRegression on the same feature set
+Two baselines are trained and logged to MLflow for comparison with the
+main LightGBM model:
 
-Both are logged to MLflow in the same experiment as the main model for
-easy comparison.
+    1. **Persistence** -- predict = ``load_lag_24h`` (same hour yesterday).
+    2. **Linear Regression** -- scikit-learn ``LinearRegression`` on the
+       full feature set.
 
-Usage:
+Usage::
+
     python -m src.ml.training.baseline
 """
 
@@ -23,115 +23,140 @@ import mlflow
 import mlflow.sklearn
 import numpy as np
 import pandas as pd
-import yaml
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from src.ml.features.feature_engineering import get_feature_columns
+from src.ml.training.data import (
+    get_feature_target_split,
+    load_training_data,
+    temporal_split,
+)
+from src.shared.config import load_config
+from src.shared.metrics import compute_regression_metrics
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+CONFIG_PATH = PROJECT_ROOT / "configs" / "training" / "lightgbm.yaml"
+DATA_PATH = PROJECT_ROOT / "data" / "gold" / "training_set.parquet"
 
 
-def _load_split_config() -> dict:
-    config_path = PROJECT_ROOT / "configs" / "training" / "lightgbm.yaml"
-    if config_path.exists():
-        with open(config_path) as f:
-            cfg = yaml.safe_load(f)
-        return cfg.get("split", {})
-    return {"train_end": "2024-06-30", "val_end": "2024-09-30"}
+# ---------------------------------------------------------------------------
+# Baseline trainers
+# ---------------------------------------------------------------------------
 
+def train_persistence_baseline(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    target_col: str,
+    config: dict,
+) -> dict[str, float]:
+    """Evaluate the persistence baseline (lag-24h) on the test set.
 
-def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-    mask = y_true != 0
-    mape = (
-        float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])))
-        if mask.sum() > 0
-        else float("nan")
+    Args:
+        df: Full time-sorted DataFrame.
+        feature_cols: Feature column names (unused here but kept for API
+            symmetry).
+        target_col: Target column name.
+        config: Training configuration dict.
+
+    Returns:
+        Dictionary of test metrics.
+    """
+    _, _, test_df, _ = temporal_split(
+        df, config["split"]["train_ratio"], config["split"]["val_ratio"],
     )
-    return {
-        "mae": float(mean_absolute_error(y_true, y_pred)),
-        "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-        "mape": mape,
-        "r2": float(r2_score(y_true, y_pred)),
-    }
 
+    if "load_lag_24h" not in df.columns:
+        logger.error("Column 'load_lag_24h' not found. Cannot run persistence baseline.")
+        return {}
+
+    y_test = test_df[target_col].values
+    y_pred = test_df["load_lag_24h"].values
+
+    valid = ~np.isnan(y_pred) & ~np.isnan(y_test)
+    metrics = compute_regression_metrics(y_test[valid], y_pred[valid])
+    return metrics
+
+
+def train_linear_baseline(
+    df: pd.DataFrame,
+    feature_cols: list[str],
+    target_col: str,
+    config: dict,
+) -> dict[str, float]:
+    """Train a linear regression baseline on the same split.
+
+    Args:
+        df: Full time-sorted DataFrame.
+        feature_cols: Feature column names.
+        target_col: Target column name.
+        config: Training configuration dict.
+
+    Returns:
+        Dictionary of test metrics.
+    """
+    train_df, _, test_df, _ = temporal_split(
+        df, config["split"]["train_ratio"], config["split"]["val_ratio"],
+    )
+
+    X_train, y_train = get_feature_target_split(train_df, feature_cols, target_col)
+    X_test, y_test = get_feature_target_split(test_df, feature_cols, target_col)
+
+    X_train = X_train.fillna(0)
+    X_test = X_test.fillna(0)
+
+    lr = LinearRegression()
+    lr.fit(X_train, y_train)
+    y_pred = lr.predict(X_test)
+
+    metrics = compute_regression_metrics(y_test.values, y_pred)
+    return metrics
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
 
 def run_baselines() -> None:
-    """Train and log both baseline models."""
-    # --- Load data ---
-    data_path = PROJECT_ROOT / "data" / "gold" / "training_set.parquet"
-    if not data_path.exists():
-        raise FileNotFoundError(f"Training data not found at {data_path}")
-    df = pd.read_parquet(data_path)
-    df = df.sort_values("timestamp_brussels").reset_index(drop=True)
-    ts = pd.to_datetime(df["timestamp_brussels"])
+    """Train both baselines and log results to MLflow.
 
-    split_cfg = _load_split_config()
-    train_end = pd.Timestamp(split_cfg["train_end"])
-    val_end = pd.Timestamp(split_cfg["val_end"])
+    Reads all configuration from ``configs/training/lightgbm.yaml``
+    (SSoT) and reuses the same temporal split as the main model.
+    """
+    cfg = load_config(CONFIG_PATH)
 
-    train_mask = ts <= train_end
-    test_mask = ts > val_end
+    df = load_training_data(DATA_PATH)
 
     target_col = "target_load_24h"
     feature_cols = [c for c in get_feature_columns() if c in df.columns]
 
-    y_test = df.loc[test_mask, target_col].values
-
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
-    mlflow.set_experiment("energy-demand-forecast")
+    mlflow.set_experiment(cfg["experiment_name"])
 
-    # ------------------------------------------------------------------
-    # Baseline 1: Persistence (predict = load_lag_24h)
-    # ------------------------------------------------------------------
+    # -- persistence --
     logger.info("Running persistence baseline...")
     with mlflow.start_run(run_name="baseline-persistence"):
         mlflow.set_tag("model_type", "baseline-persistence")
         mlflow.set_tag("python_version", platform.python_version())
 
-        if "load_lag_24h" not in df.columns:
-            logger.error(
-                "Column 'load_lag_24h' not found. Cannot run persistence baseline."
-            )
-        else:
-            y_pred_persist = df.loc[test_mask, "load_lag_24h"].values
-            # Drop rows where lag is NaN
-            valid = ~np.isnan(y_pred_persist) & ~np.isnan(y_test)
-            metrics = _compute_metrics(y_test[valid], y_pred_persist[valid])
+        metrics = train_persistence_baseline(df, feature_cols, target_col, cfg)
+        if metrics:
             for k, v in metrics.items():
                 mlflow.log_metric(f"test_{k}", v)
             mlflow.log_params({"method": "persistence", "lag_hours": 24})
             logger.info("Persistence baseline test metrics: %s", metrics)
 
-    # ------------------------------------------------------------------
-    # Baseline 2: Linear Regression
-    # ------------------------------------------------------------------
+    # -- linear regression --
     logger.info("Running linear regression baseline...")
     with mlflow.start_run(run_name="baseline-linear-regression"):
         mlflow.set_tag("model_type", "baseline-linear-regression")
         mlflow.set_tag("python_version", platform.python_version())
 
-        X_train = df.loc[train_mask, feature_cols].copy()
-        y_train = df.loc[train_mask, target_col].values
-        X_test_lr = df.loc[test_mask, feature_cols].copy()
-
-        # Fill NaN for linear regression
-        X_train = X_train.fillna(0)
-        X_test_lr = X_test_lr.fillna(0)
-
-        lr = LinearRegression()
-        lr.fit(X_train, y_train)
-        y_pred_lr = lr.predict(X_test_lr)
-
-        metrics = _compute_metrics(y_test, y_pred_lr)
+        metrics = train_linear_baseline(df, feature_cols, target_col, cfg)
         for k, v in metrics.items():
             mlflow.log_metric(f"test_{k}", v)
-        mlflow.log_params(
-            {"method": "linear_regression", "n_features": len(feature_cols)}
-        )
-        mlflow.sklearn.log_model(lr, artifact_path="model")
+        mlflow.log_params({"method": "linear_regression", "n_features": len(feature_cols)})
         logger.info("Linear regression baseline test metrics: %s", metrics)
 
 
@@ -140,6 +165,7 @@ def run_baselines() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    """CLI entry point for ``python -m src.ml.training.baseline``."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
     run_baselines()
     print("Baseline models logged to MLflow.")

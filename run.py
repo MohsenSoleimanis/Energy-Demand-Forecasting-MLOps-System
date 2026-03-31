@@ -118,19 +118,19 @@ def cmd_ingest(args):
 
     if source is None or source == "entsoe":
         print("\n--- Ingesting ENTSO-E data (load, price, generation) ---")
-        run(f"{sys.executable} -m src.data_platform.ingestion.ingest_entsoe")
+        run(f"{sys.executable} -m src.data_platform.ingestion.entsoe")
 
     if source is None or source == "weather":
         print("\n--- Ingesting weather actuals ---")
-        run(f"{sys.executable} -m src.data_platform.ingestion.ingest_weather")
+        run(f"{sys.executable} -m src.data_platform.ingestion.weather")
 
     if source is None or source == "forecast":
         print("\n--- Ingesting weather forecast ---")
-        run(f"{sys.executable} -m src.data_platform.ingestion.ingest_weather_forecast")
+        run(f"{sys.executable} -m src.data_platform.ingestion.weather_forecast")
 
     if source is None or source == "calendar":
         print("\n--- Generating Belgian calendar ---")
-        run(f"{sys.executable} -m src.data_platform.ingestion.generate_calendar")
+        run(f"{sys.executable} -m src.data_platform.ingestion.calendar")
 
     print("\nIngestion complete.")
 

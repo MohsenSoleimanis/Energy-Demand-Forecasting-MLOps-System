@@ -7,10 +7,10 @@ down:
 	docker compose down
 
 ingest:
-	python -m src.data_platform.ingestion.ingest_entsoe
-	python -m src.data_platform.ingestion.ingest_weather
-	python -m src.data_platform.ingestion.ingest_weather_forecast
-	python -m src.data_platform.ingestion.generate_calendar
+	python -m src.data_platform.ingestion.entsoe
+	python -m src.data_platform.ingestion.weather
+	python -m src.data_platform.ingestion.weather_forecast
+	python -m src.data_platform.ingestion.calendar
 
 transform:
 	cd src/data_platform/dbt_project && dbt run

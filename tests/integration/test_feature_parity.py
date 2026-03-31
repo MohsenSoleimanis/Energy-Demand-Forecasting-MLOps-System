@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from src.ml.features.feature_engineering import prepare_features
+from src.ml.features.engineering import prepare_features
 
 
 def test_feature_parity(sample_feature_base_df):

@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from src.ml.features.feature_engineering import prepare_features
+from src.ml.features.engineering import prepare_features
 from src.ml.serving.auth import require_api_key
 from src.ml.serving.metrics import (
     MODEL_VERSION_GAUGE,
@@ -126,7 +126,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 def _predict_single(request: PredictionRequest) -> PredictionResponse:
     """Run prediction for a single request. Assumes _model is not None."""
-    from src.ml.features.feature_engineering import get_feature_columns
+    from src.ml.features.engineering import get_feature_columns
 
     df = pd.DataFrame([request.model_dump()])
     df = prepare_features(df, mode="serving")

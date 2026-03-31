@@ -8,7 +8,7 @@ import pytest
 
 pyarrow = pytest.importorskip("pyarrow", reason="pyarrow required for parquet tests")
 
-from src.ml.features.feature_engineering import get_feature_columns, prepare_features
+from src.ml.features.engineering import get_feature_columns, prepare_features
 
 
 @pytest.fixture

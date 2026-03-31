@@ -31,14 +31,14 @@ with DAG(
 
     ingest_weather_forecast = BashOperator(
         task_id="ingest_weather_forecast",
-        bash_command="cd /app && python -m src.data_platform.ingestion.ingest_weather_forecast",
+        bash_command="cd /app && python -m src.data_platform.ingestion.weather_forecast",
     )
 
     prepare_features = BashOperator(
         task_id="prepare_features",
         bash_command=(
             "cd /app && python -c \""
-            "from src.ml.features.feature_engineering import prepare_features; "
+            "from src.ml.features.engineering import prepare_features; "
             "prepare_features()\""
         ),
     )

@@ -31,12 +31,12 @@ with DAG(
 
     ingest_entsoe = BashOperator(
         task_id="ingest_entsoe",
-        bash_command="cd /app && python -m src.data_platform.ingestion.ingest_entsoe",
+        bash_command="cd /app && python -m src.data_platform.ingestion.entsoe",
     )
 
     ingest_weather = BashOperator(
         task_id="ingest_weather",
-        bash_command="cd /app && python -m src.data_platform.ingestion.ingest_weather",
+        bash_command="cd /app && python -m src.data_platform.ingestion.weather",
     )
 
     dbt_run = BashOperator(
