@@ -24,7 +24,7 @@ stages:
           cache: false
 
   evaluate:
-    cmd: python -m src.ml.training.evaluate --run-id $(cat metrics/run_id.txt)
+    cmd: python -m src.ml.training.evaluate
     deps:
       - src/ml/training/evaluate.py
       - metrics/run_id.txt

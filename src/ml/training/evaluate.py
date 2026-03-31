@@ -232,10 +232,21 @@ def evaluate(run_id: str) -> dict:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-    parser = argparse.ArgumentParser(description="Evaluate trained model")
-    parser.add_argument("--run-id", required=True, help="MLflow run ID to evaluate")
-    args = parser.parse_args()
-    metrics = evaluate(args.run_id)
+
+    # Try to read run_id from file first (DVC pipeline), then CLI arg
+    run_id = None
+    run_id_file = PROJECT_ROOT / "metrics" / "run_id.txt"
+    if run_id_file.exists():
+        run_id = run_id_file.read_text().strip()
+        logger.info("Read run_id from %s: %s", run_id_file, run_id)
+
+    if not run_id:
+        parser = argparse.ArgumentParser(description="Evaluate trained model")
+        parser.add_argument("--run-id", required=True, help="MLflow run ID to evaluate")
+        args = parser.parse_args()
+        run_id = args.run_id
+
+    metrics = evaluate(run_id)
     print(json.dumps({k: v for k, v in metrics.items() if not isinstance(v, dict)}, indent=2))
 
 
