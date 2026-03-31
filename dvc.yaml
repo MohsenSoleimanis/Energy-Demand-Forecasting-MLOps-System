@@ -6,6 +6,15 @@ stages:
     outs:
       - data/gold/training_set.parquet
 
+  validate_gold:
+    cmd: python -m src.data_platform.quality.validate
+    deps:
+      - data/gold/training_set.parquet
+      - src/data_platform/quality/great_expectations/expectations/gold_training_suite.json
+    outs:
+      - data/quality/validation_result.json:
+          cache: false
+
   train:
     cmd: python -m src.ml.training.train
     deps:

@@ -13,3 +13,12 @@ energy_demand:
         s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
         s3_use_ssl: false
         s3_url_style: path
+    postgres_serving:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: energy_warehouse
+      schema: public
+      threads: 4
