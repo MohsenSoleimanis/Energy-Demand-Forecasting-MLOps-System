@@ -6,10 +6,8 @@ and temporal features. Data is stored as Parquet in MinIO bronze layer.
 import argparse
 import io
 import logging
-import os
 from datetime import date, timedelta
 
-import boto3
 import holidays
 import pandas as pd
 
@@ -27,13 +25,7 @@ PREFIX = "bronze/calendar/"
 # S3 / MinIO helpers
 # ---------------------------------------------------------------------------
 
-def get_s3_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000"),
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
-    )
+from src.shared.config import get_s3_client
 
 
 def upload_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:

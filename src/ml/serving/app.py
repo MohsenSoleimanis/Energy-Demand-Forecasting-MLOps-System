@@ -12,18 +12,19 @@ Endpoints:
     POST /model/reload    - Hot-reload the production model
 """
 
-import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.ml.features.feature_engineering import prepare_features
+from src.ml.serving.auth import require_api_key
 from src.ml.serving.metrics import (
     MODEL_VERSION_GAUGE,
     PREDICTION_COUNT,
@@ -31,6 +32,7 @@ from src.ml.serving.metrics import (
     PREDICTION_VALUE,
 )
 from src.ml.serving.model_loader import load_production_model
+from src.ml.serving.prediction_logger import PredictionLogger
 from src.ml.serving.schemas import (
     BatchPredictionRequest,
     HealthResponse,
@@ -47,6 +49,7 @@ logger = logging.getLogger(__name__)
 _model = None
 _model_version = None
 _model_name = "energy-demand-forecast"
+_prediction_logger = None
 
 
 def _set_model(model, model_version):
@@ -67,12 +70,8 @@ def _set_model(model, model_version):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the production model on startup."""
-    # Ensure MLflow can reach MinIO for artifact storage
-    import os
-    os.environ.setdefault("MLFLOW_TRACKING_URI", "http://localhost:5000")
-    os.environ.setdefault("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
-    os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
-    os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "minioadmin")
+    from src.shared.config import get_s3_client, load_env_file
+    load_env_file()
 
     logger.info("Loading production model from MLflow registry ...")
     model, version = load_production_model(_model_name)
@@ -82,7 +81,20 @@ async def lifespan(app: FastAPI):
             "No production model available. /predict will return 503 until "
             "a model is loaded via POST /model/reload."
         )
+
+    # Initialize prediction logger
+    global _prediction_logger
+    try:
+        _prediction_logger = PredictionLogger(s3_client=get_s3_client())
+        logger.info("Prediction logger initialized")
+    except Exception as e:
+        logger.warning("Failed to initialize prediction logger: %s", e)
+
     yield
+
+    # Cleanup
+    if _prediction_logger:
+        _prediction_logger.close()
 
 
 # ---------------------------------------------------------------------------
@@ -94,10 +106,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_origins = os.environ.get(
+    "CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000"
+).split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[o.strip() for o in cors_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -122,24 +136,19 @@ def _predict_single(request: PredictionRequest) -> PredictionResponse:
     prediction = _model.predict(df[get_feature_columns()])
     predicted_load = float(prediction[0])
     PREDICTION_VALUE.observe(predicted_load)
-    return PredictionResponse(
+    response = PredictionResponse(
         timestamp_brussels=request.timestamp_brussels,
         predicted_load_mw=predicted_load,
         model_version=_model_version.version,
     )
 
-
-async def _log_prediction_to_minio(response: PredictionResponse) -> None:
-    """Log prediction asynchronously (non-blocking, best-effort)."""
-    try:
-        # Placeholder: in production this would write to MinIO / S3
-        logger.debug(
-            "Logged prediction %s: %.2f MW",
-            response.prediction_id,
-            response.predicted_load_mw,
+    if _prediction_logger:
+        _prediction_logger.log(
+            request_data=request.model_dump(),
+            response_data=response.model_dump(),
         )
-    except Exception:
-        logger.exception("Failed to log prediction to MinIO")
+
+    return response
 
 
 def _require_model():
@@ -155,15 +164,13 @@ def _require_model():
 # Endpoints
 # ---------------------------------------------------------------------------
 @app.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest):
+async def predict(request: PredictionRequest, _key: str = Depends(require_api_key)):
     """Return a single energy demand prediction."""
     _require_model()
     start = time.time()
     try:
         response = _predict_single(request)
         PREDICTION_COUNT.labels(endpoint="/predict", status="success").inc()
-        # Fire-and-forget async logging
-        asyncio.create_task(_log_prediction_to_minio(response))
         return response
     except Exception as e:
         PREDICTION_COUNT.labels(endpoint="/predict", status="error").inc()
@@ -174,15 +181,13 @@ async def predict(request: PredictionRequest):
 
 
 @app.post("/predict/batch", response_model=list[PredictionResponse])
-async def predict_batch(request: BatchPredictionRequest):
+async def predict_batch(request: BatchPredictionRequest, _key: str = Depends(require_api_key)):
     """Return predictions for a batch of up to 1000 requests."""
     _require_model()
     start = time.time()
     try:
         responses = [_predict_single(r) for r in request.predictions]
         PREDICTION_COUNT.labels(endpoint="/predict/batch", status="success").inc()
-        for resp in responses:
-            asyncio.create_task(_log_prediction_to_minio(resp))
         return responses
     except Exception as e:
         PREDICTION_COUNT.labels(endpoint="/predict/batch", status="error").inc()
@@ -216,7 +221,7 @@ async def metrics():
 
 
 @app.get("/model/info", response_model=ModelInfoResponse)
-async def model_info():
+async def model_info(_key: str = Depends(require_api_key)):
     """Return metadata about the currently loaded model."""
     _require_model()
     import mlflow
@@ -232,7 +237,7 @@ async def model_info():
 
 
 @app.post("/model/reload", response_model=HealthResponse)
-async def reload_model():
+async def reload_model(_key: str = Depends(require_api_key)):
     """Hot-reload the production model from MLflow registry."""
     logger.info("Reloading production model ...")
     model, version = load_production_model(_model_name)

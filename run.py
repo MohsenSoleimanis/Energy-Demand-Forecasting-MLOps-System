@@ -59,13 +59,9 @@ def ensure_env():
         else:
             print("Error: No .env or .env.example found.")
             sys.exit(1)
-    # Load all env vars
-    import os
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, val = line.partition("=")
-            os.environ.setdefault(key.strip(), val.strip())
+    # Load all env vars using shared config
+    from src.shared.config import load_env_file
+    load_env_file(str(env_file))
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +106,7 @@ def cmd_status(_args):
 
     print()
     print("  MLflow UI:      http://localhost:5000")
-    print("  MinIO Console:  http://localhost:9001  (minioadmin/minioadmin)")
+    print("  MinIO Console:  http://localhost:9001  (see .env for credentials)")
     print("  Prometheus:     http://localhost:9090")
     print("  Grafana:        http://localhost:3000  (admin/admin)")
 
@@ -152,8 +148,11 @@ def cmd_transform(_args):
 def cmd_train(_args):
     """Run the ML training pipeline."""
     ensure_env()
-    run(f"{sys.executable} -m src.ml.training.pull_gold", check=False)
-    run(f"{sys.executable} -m src.ml.training.train")
+    if shutil.which("dvc"):
+        run("dvc repro")
+    else:
+        run(f"{sys.executable} -m src.ml.training.pull_gold", check=False)
+        run(f"{sys.executable} -m src.ml.training.train")
     print("\nTraining complete. Check MLflow at http://localhost:5000")
 
 
@@ -173,6 +172,8 @@ def cmd_test(_args):
 
 def cmd_monitor(_args):
     """Generate monitoring reports."""
+    ensure_env()
+    run(f"{sys.executable} -m src.ml.monitoring.build_monitoring_set", check=False)
     run(f"{sys.executable} -m src.ml.monitoring.drift_report", check=False)
     run(f"{sys.executable} -m src.ml.monitoring.performance_report", check=False)
 

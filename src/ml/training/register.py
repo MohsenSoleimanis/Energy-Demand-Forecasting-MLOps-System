@@ -14,7 +14,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
 import os
@@ -159,11 +158,24 @@ def register(run_id: str) -> str | None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
-    parser = argparse.ArgumentParser(description="Register model in MLflow")
-    parser.add_argument("--run-id", required=True, help="MLflow run ID to register")
-    args = parser.parse_args()
+    from src.shared.config import load_env_file
+    load_env_file()
 
-    version = register(args.run_id)
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000"))
+
+    # Read run_id from DVC pipeline output
+    run_id_file = Path(__file__).resolve().parents[3] / "metrics" / "run_id.txt"
+    if run_id_file.exists():
+        run_id = run_id_file.read_text().strip()
+    else:
+        metrics = _load_eval_metrics()
+        run_id = metrics.get("run_id")
+
+    if not run_id:
+        logger.error("No run_id found")
+        sys.exit(1)
+
+    version = register(run_id)
     if version is None:
         print("Model registration SKIPPED (quality gates failed).")
         sys.exit(1)

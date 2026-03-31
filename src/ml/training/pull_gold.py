@@ -61,16 +61,14 @@ def pull_gold(
         # Install and load extensions for S3/MinIO access
         try:
             con.execute("INSTALL httpfs; LOAD httpfs;")
-            con.execute(
-                """
+            con.execute(f"""
                 SET s3_region='us-east-1';
-                SET s3_endpoint='localhost:9000';
-                SET s3_access_key_id='minioadmin';
-                SET s3_secret_access_key='minioadmin';
+                SET s3_endpoint='{os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000").replace("http://", "").replace("https://", "")}';
+                SET s3_access_key_id='{os.environ["AWS_ACCESS_KEY_ID"]}';
+                SET s3_secret_access_key='{os.environ["AWS_SECRET_ACCESS_KEY"]}';
                 SET s3_use_ssl=false;
                 SET s3_url_style='path';
-                """
-            )
+            """)
         except Exception:
             pass  # Extensions may already be loaded
 

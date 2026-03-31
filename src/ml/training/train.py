@@ -309,6 +309,9 @@ def train() -> str:
         with open(metrics_dir / "train_metrics.json", "w") as f:
             json.dump(train_metrics, f, indent=2)
 
+        # Write run_id for DVC pipeline downstream stages
+        (metrics_dir / "run_id.txt").write_text(run_id)
+
         logger.info("Training complete. MLflow run_id=%s", run_id)
         return run_id
 
