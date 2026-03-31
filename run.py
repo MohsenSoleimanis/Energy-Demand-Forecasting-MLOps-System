@@ -14,6 +14,9 @@ Usage:
     python run.py monitor             Generate monitoring reports
     python run.py status              Check service health
     python run.py setup               Full setup: up -> ingest -> transform -> train
+    python run.py export              Export gold tables to PostgreSQL and Delta Lake
+    python run.py validate            Run data quality validation on gold data
+    python run.py stream              Start Kafka streaming producer
 """
 
 import argparse
@@ -189,6 +192,26 @@ def cmd_monitor(_args):
     run(f"{sys.executable} -m src.ml.monitoring.build_monitoring_set", check=False)
     run(f"{sys.executable} -m src.ml.monitoring.drift_report", check=False)
     run(f"{sys.executable} -m src.ml.monitoring.performance_report", check=False)
+
+
+def cmd_export(_args):
+    """Export gold tables from DuckDB to PostgreSQL and Delta Lake."""
+    ensure_env()
+    run(f"{sys.executable} -m src.data_platform.export_to_postgres")
+    print("\nExport complete. Gold tables available in PostgreSQL and Delta Lake.")
+
+
+def cmd_validate(_args):
+    """Run data quality validation on gold training data."""
+    ensure_env()
+    run(f"{sys.executable} -m src.data_platform.quality.validate")
+
+
+def cmd_stream(_args):
+    """Start the Kafka streaming producer for real-time ENTSO-E data."""
+    ensure_env()
+    print("Starting Kafka streaming producer (Ctrl+C to stop)...")
+    run(f"{sys.executable} -m src.data_platform.streaming.producer")
 
 
 def cmd_setup(args):
