@@ -137,6 +137,7 @@ def cmd_ingest(args):
 
 def cmd_transform(_args):
     """Run dbt transformations (bronze -> silver -> gold)."""
+    ensure_env()
     if not check_tool("dbt", "Install: pip install dbt-core dbt-duckdb"):
         sys.exit(1)
     run("dbt deps", cwd=DBT_DIR)
@@ -158,6 +159,7 @@ def cmd_train(_args):
 
 def cmd_serve(_args):
     """Start the FastAPI prediction server."""
+    ensure_env()
     print("\nStarting API server...")
     print("  API docs: http://localhost:8000/docs")
     print("  Health:   http://localhost:8000/health")
