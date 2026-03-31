@@ -159,13 +159,23 @@ def cmd_train(args):
 
 
 def cmd_serve(_args):
-    """Start the FastAPI prediction server."""
+    """Start the FastAPI prediction server.
+
+    Runs inside Docker so Prometheus can scrape metrics and Grafana
+    shows real dashboards. Use 'docker compose logs -f api' to see logs.
+    """
     ensure_env()
-    print("\nStarting API server...")
-    print("  API docs: http://localhost:8000/docs")
-    print("  Health:   http://localhost:8000/health")
-    print("  Press Ctrl+C to stop\n")
-    run(f"{sys.executable} -m uvicorn src.ml.serving.app:app --host 0.0.0.0 --port 8000 --reload")
+    # Rebuild and start the API container
+    run("docker compose up -d --build api")
+    print("\n  API is running in Docker.")
+    print("  API docs:    http://localhost:8000/docs")
+    print("  Health:      http://localhost:8000/health")
+    print("  Metrics:     http://localhost:8000/metrics")
+    print("  Grafana:     http://localhost:3000")
+    print("  API logs:    docker compose logs -f api")
+    print()
+    print("  To stop:     docker compose stop api")
+    print("  To restart:  docker compose restart api")
 
 
 def cmd_test(_args):

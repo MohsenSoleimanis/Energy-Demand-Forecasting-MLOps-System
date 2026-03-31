@@ -10,7 +10,7 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir \
     fastapi \
-    uvicorn[standard] \
+    "uvicorn[standard]" \
     pydantic \
     mlflow \
     lightgbm \
@@ -18,12 +18,15 @@ RUN pip install --no-cache-dir \
     numpy \
     prometheus-client \
     boto3 \
-    hydra-core
+    pyyaml
 
+# Copy source code preserving package structure
+COPY src/__init__.py src/__init__.py
+COPY src/shared/ src/shared/
 COPY src/ml/__init__.py src/ml/__init__.py
 COPY src/ml/serving/ src/ml/serving/
 COPY src/ml/features/ src/ml/features/
-COPY configs/serving/ configs/serving/
+COPY configs/ configs/
 
 EXPOSE 8000
 
