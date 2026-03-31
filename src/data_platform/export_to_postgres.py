@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 
 import duckdb
-import pandas as pd
 from sqlalchemy import create_engine
 
 logger = logging.getLogger(__name__)

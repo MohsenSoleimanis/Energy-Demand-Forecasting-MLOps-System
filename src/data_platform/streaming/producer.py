@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from confluent_kafka import Producer
 
-from src.shared.config import load_env_file, require_env
+from src.shared.config import load_env_file
 
 logger = logging.getLogger(__name__)
 
