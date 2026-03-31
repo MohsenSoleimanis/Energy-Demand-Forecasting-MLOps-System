@@ -195,12 +195,26 @@ def train(tune: bool = False) -> str:
     else:
         raise ValueError("Column 'timestamp_brussels' not found in training data.")
 
-    train_end = pd.Timestamp(split_cfg["train_end"])
-    val_end = pd.Timestamp(split_cfg["val_end"])
+    # Dynamic temporal split based on data range (no hardcoded dates)
+    # Default ratios: 70% train, 15% validation, 15% test
+    train_ratio = split_cfg.get("train_ratio", 0.70)
+    val_ratio = split_cfg.get("val_ratio", 0.15)
+
+    n = len(df)
+    train_end_idx = int(n * train_ratio)
+    val_end_idx = int(n * (train_ratio + val_ratio))
+
+    train_end = ts.iloc[train_end_idx]
+    val_end = ts.iloc[val_end_idx]
 
     train_mask = ts <= train_end
     val_mask = (ts > train_end) & (ts <= val_end)
     test_mask = ts > val_end
+
+    logger.info(
+        "Dynamic split: train until %s, val until %s, test after",
+        train_end.date(), val_end.date(),
+    )
 
     # --- Features and target ---
     target_col = "target_load_24h"

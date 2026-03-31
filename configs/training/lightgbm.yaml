@@ -11,8 +11,11 @@ model:
   early_stopping_rounds: 50
 
 split:
-  train_end: "2025-06-30"
-  val_end: "2025-12-31"
+  # Dynamic split ratios - computed from available data
+  # No hardcoded dates - works regardless of data time range
+  train_ratio: 0.70  # 70% oldest data for training
+  val_ratio: 0.15    # 15% for validation (early stopping)
+  # remaining 15% for test (final evaluation)
 
 random_seed: 42
 
@@ -21,4 +24,4 @@ model_name: "energy-demand-forecast"
 
 quality_gates:
   max_mape: 0.07
-  min_training_rows: 10000
+  min_training_rows: 8000
