@@ -1,0 +1,37 @@
+name: Integration Tests
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: mlflow
+          POSTGRES_PASSWORD: mlflow_password
+          POSTGRES_DB: mlflow
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[test]"
+      - run: pytest tests/integration/ -v --tb=short
+        env:
+          MLFLOW_TRACKING_URI: sqlite:///mlflow.db
+          DATABASE_URL: postgresql://mlflow:mlflow_password@localhost:5432/mlflow

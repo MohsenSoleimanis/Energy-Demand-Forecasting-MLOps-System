@@ -1,0 +1,26 @@
+synthetic:
+  num_buildings: 50
+  start_date: "2020-01-01"
+  end_date: "2023-12-31"
+  frequency: "1H"  # hourly
+  random_seed: 42
+  noise_level: 0.1
+  seasonal_weights:
+    daily: 1.0
+    weekly: 0.7
+    yearly: 0.5
+  weather:
+    temp_mean: 15.0
+    temp_std: 10.0
+    humidity_mean: 60.0
+    humidity_std: 15.0
+
+processing:
+  lag_features: [1, 2, 3, 6, 12, 24, 48, 168]
+  rolling_windows: [6, 12, 24, 48, 168]
+  target_column: "energy_demand_kwh"
+  time_column: "timestamp"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  normalization: "standard"  # standard or minmax
