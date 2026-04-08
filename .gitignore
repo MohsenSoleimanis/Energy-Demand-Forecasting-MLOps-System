@@ -23,8 +23,8 @@ env/
 .env
 .env.local
 
-# Data
-data/
+# Data (runtime data directory only, not the Python source package src/energy_forecast/data/)
+/data/
 *.parquet
 *.csv
 !configs/*.csv
