@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: energy-forecast
+  labels:
+    app.kubernetes.io/name: energy-forecast
+    app.kubernetes.io/part-of: energy-demand-forecasting
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Energy Demand Forecasting MLOps System"

@@ -1,0 +1,40 @@
+experiment:
+  name: "energy-demand-forecasting"
+  tracking_uri: "http://localhost:5000"
+
+models:
+  linear:
+    type: "ridge"
+    alpha: 1.0
+    fit_intercept: true
+
+  xgboost:
+    n_estimators: 500
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    early_stopping_rounds: 50
+    eval_metric: "rmse"
+
+  lstm:
+    hidden_size: 128
+    num_layers: 2
+    dropout: 0.2
+    sequence_length: 168  # 1 week of hourly data
+    batch_size: 64
+    epochs: 50
+    learning_rate: 0.001
+    patience: 10
+
+training:
+  cross_validation:
+    n_splits: 5
+    strategy: "expanding_window"
+    gap: 24  # hours gap between train and test
+
+  hyperparameter_search:
+    n_trials: 50
+    timeout: 3600
+    metric: "rmse"
+    direction: "minimize"

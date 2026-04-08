@@ -1,0 +1,27 @@
+drift:
+  reference_window_days: 30
+  analysis_window_days: 7
+  features_to_monitor:
+    - "energy_demand_kwh"
+    - "temperature"
+    - "humidity"
+    - "hour_sin"
+    - "hour_cos"
+  thresholds:
+    dataset_drift: 0.5
+    feature_drift: 0.3
+    prediction_drift: 0.2
+
+performance:
+  metrics:
+    - "mae"
+    - "rmse"
+    - "mape"
+    - "r2"
+  degradation_threshold: 0.15
+  rolling_window: 7  # days
+
+alerting:
+  enabled: true
+  channels:
+    - "log"

@@ -1,0 +1,46 @@
+groups:
+  - name: energy_forecasting_alerts
+    rules:
+      - alert: HighPredictionLatency
+        expr: avg(rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: energy-forecast-api
+        annotations:
+          summary: "High prediction latency detected"
+          description: "Average prediction latency has exceeded 1 second for more than 5 minutes. Current value: {{ $value | humanizeDuration }}."
+          runbook_url: "https://wiki.internal/runbooks/high-prediction-latency"
+
+      - alert: ModelDriftDetected
+        expr: drift_score > 0.5
+        for: 15m
+        labels:
+          severity: critical
+          service: energy-forecast-model
+        annotations:
+          summary: "Model drift detected on feature {{ $labels.feature }}"
+          description: "Drift score for feature {{ $labels.feature }} has been above 0.5 for more than 15 minutes. Current drift score: {{ $value | printf \"%.3f\" }}. Model retraining may be required."
+          runbook_url: "https://wiki.internal/runbooks/model-drift"
+
+      - alert: HighErrorRate
+        expr: (sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          service: energy-forecast-api
+        annotations:
+          summary: "High HTTP error rate detected"
+          description: "The API error rate has exceeded 5% for more than 10 minutes. Current error rate: {{ $value | humanizePercentage }}."
+          runbook_url: "https://wiki.internal/runbooks/high-error-rate"
+
+      - alert: ModelNotLoaded
+        expr: model_loaded == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: energy-forecast-model
+        annotations:
+          summary: "Model is not loaded"
+          description: "The forecasting model has not been loaded for more than 2 minutes. The API cannot serve predictions without a loaded model. Immediate investigation required."
+          runbook_url: "https://wiki.internal/runbooks/model-not-loaded"
